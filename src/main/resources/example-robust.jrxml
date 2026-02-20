@@ -1,0 +1,529 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xmlns:jr="http://jasperreports.sourceforge.net/jasperreports/components"
+              xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd
+                                  http://jasperreports.sourceforge.net/jasperreports/components http://jasperreports.sourceforge.net/xsd/components.xsd"
+              name="example-robust"
+              pageWidth="612"
+              pageHeight="792"
+              whenNoDataType="AllSectionsNoDetail"
+              columnWidth="555"
+              leftMargin="20"
+              rightMargin="20"
+              topMargin="20"
+              bottomMargin="20">
+
+    <style name="Table_TH" mode="Opaque" backcolor="#F0F8FF">
+        <box>
+            <pen lineWidth="0.5" lineColor="#000000"/>
+            <topPen lineWidth="0.5" lineColor="#000000"/>
+            <leftPen lineWidth="0.5" lineColor="#000000"/>
+            <bottomPen lineWidth="0.5" lineColor="#000000"/>
+            <rightPen lineWidth="0.5" lineColor="#000000"/>
+        </box>
+    </style>
+    <style name="Table_TD" mode="Opaque" backcolor="#FFFFFF">
+        <box>
+            <pen lineWidth="0.5" lineColor="#000000"/>
+            <topPen lineWidth="0.5" lineColor="#000000"/>
+            <leftPen lineWidth="0.5" lineColor="#000000"/>
+            <bottomPen lineWidth="0.5" lineColor="#000000"/>
+            <rightPen lineWidth="0.5" lineColor="#000000"/>
+        </box>
+    </style>
+    <style name="Table_CH" mode="Opaque" backcolor="#BFE1FF">
+        <box>
+            <pen lineWidth="0.5" lineColor="#000000"/>
+            <topPen lineWidth="0.5" lineColor="#000000"/>
+            <leftPen lineWidth="0.5" lineColor="#000000"/>
+            <bottomPen lineWidth="0.5" lineColor="#000000"/>
+            <rightPen lineWidth="0.5" lineColor="#000000"/>
+        </box>
+    </style>
+
+    <subDataset name="DatasetAprobadores">
+        <queryString><![CDATA[]]></queryString>
+        <field name="name" class="java.lang.String"/>
+        <field name="status" class="java.lang.String"/>
+        <field name="fecha" class="java.lang.String"/>
+        <field name="level" class="java.lang.String"/>
+    </subDataset>
+
+    <parameter name="IMGLOGO" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["iVBORw0KGgoAAAANSUhEUgAAAPAAAAAqCAMAAAC6LibpAAAC7lBMVEUAAAAAAAAAAABVAABAQEAzMzMrKyskJCQgICA5HBwzMzMuLi4rKysnJyckJCQzIiIwMDAtLS0rKysoKCgmJiYxJCQuLi4sLCwpKSknJycvJiYuLiQsLCwrKyspKSkwKCguJyctLSYsLCwrKyspKSkvKCguJyctLSYsLCwrKysqKiouKSktKCgsLCcrKysrKysqKiouKSktKCgsLCcrKysrKysqKiouKSktKCgsLCgrKycrKysuKiotKSktKCgsLCgrKycrKysuKiotKSksKSksLCgrKygrKystKiotKSksKSksLCgrKygrKystKiotKSksKSksLCgrKygrKystKiosKiosKSkrKSkrKygtKygtKiosKiosKSkrKSkrKygtKygtKiosKiosKSkrKSkrKygtKygtKiosKiosKSkrKSkrKyktKygsKiosKiosKSkrKSkrKyksKigsKiosKSkrKSktKyktKygsKigsKiosKSkrKSktKyktKygsKigsKiorKiorKSktKyksKyksKigsKiorKiorKSktKyksKyksKigsKiorKiorKSktKyksKyksKigsKigrKiotKSksKyksKyksKiksKigrKiotKSksKyksKyksKiksKigrKiotKSksKyksKyksKiksKigrKiotKSksKyksKyksKiksKiktKigsKiosKSksKykrKiktKigsKiosKSksKyksKikrKiktKigsKiosKSksKikrKiktKigsKiosKSksKyksKikrKiksKiksKiosKSksKyksKiktKiksKiksKigsKSksKyksKiktKiksKiksKigsKyksKiktKiksKiksKiksKiosKykrKiksKiksKiksKiksKiosKykrKiksKiksKiksKiksKigsKyktKiksKiksKiksKigsKiksKiksKiksKiksKiksKyksKiksKiksKiksKiksKiksKyksKiksKiksKiksKiksKiksKyksKiksKiksKin///9eCUvOAAAA+HRSTlMAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2Bh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"]]></defaultValueExpression>
+	</parameter>
+    <parameter name="TITULAR" class="java.lang.String"/>
+    <parameter name="MONEDA" class="java.lang.String"/>
+    <parameter name="USUARIO" class="java.lang.String"/>
+    <parameter name="FECHA" class="java.lang.String"/>
+    <parameter name="levelone" class="net.sf.jasperreports.engine.data.JRBeanCollectionDataSource" isForPrompting="false"/>
+    <parameter name="leveltwo" class="net.sf.jasperreports.engine.data.JRBeanCollectionDataSource" isForPrompting="false"/>
+    <parameter name="id" class="java.lang.Integer"/>
+    <parameter name="transaction_type" class="java.lang.String"/>
+    <parameter name="origin_account" class="java.lang.String"/>
+    <parameter name="origin_amount" class="java.lang.Double"/>
+    <parameter name="voucher" class="java.lang.Integer"/>
+    <parameter name="lote_id" class="java.lang.String"/>
+    <parameter name="description" class="java.lang.String"/>
+    <parameter name="detail" class="java.lang.String"/>
+    <parameter name="creation_date" class="java.lang.String"/>
+    <parameter name="status" class="java.lang.String"/>
+    <parameter name="prepare_user" class="java.lang.String"/>
+    <parameter name="beneficiary_name" class="java.lang.String"/>
+    <parameter name="beneficiary_account" class="java.lang.String"/>
+    <parameter name="beneficiary_bank_name" class="java.lang.String"/>
+    <parameter name="economic_group_id" class="java.lang.Integer"/>
+    <parameter name="preparation_type" class="java.lang.String"/>
+    <parameter name="origin_account_name" class="java.lang.String"/>
+    <parameter name="origin_account_type" class="java.lang.String"/>
+    <parameter name="origin_currency" class="java.lang.String"/>
+    <parameter name="frequency_code" class="java.lang.String"/>
+    <parameter name="frequency_count" class="java.lang.String"/>
+    <parameter name="start_date" class="java.lang.String"/>
+    <parameter name="finish_date" class="java.lang.String"/>
+    <parameter name="scheduled_time" class="java.lang.String"/>
+    <parameter name="beneficiary_email" class="java.lang.String"/>
+    <parameter name="execution_type" class="java.lang.String"/>
+    <parameter name="total_transactions" class="java.lang.String"/>
+    <parameter name="debit_type" class="java.lang.String"/>
+    <parameter name="APROBADORES" class="java.util.ArrayList" isForPrompting="false"/>
+    <parameter name="ISPRE" class="java.lang.Boolean">
+        <defaultValueExpression><![CDATA[false]]></defaultValueExpression>
+    </parameter>
+    <parameter name="destination_amount_prepare" class="java.lang.String"/>
+    <parameter name="destination_currency" class="java.lang.String"/>
+    <parameter name="destination_bank_swift_code" class="java.lang.String"/>
+    <parameter name="user" class="java.lang.String"/>
+    <parameter name="prepare_user_fullname" class="java.lang.String"/>
+    <parameter name="reference" class="java.lang.String"/>
+    <parameter name="frequency_day" class="java.lang.String"/>
+    <parameter name="intermediary_bank_name" class="java.lang.String"/>
+    <parameter name="intermediary_bank_swift_code" class="java.lang.String"/>
+    <parameter name="charge" class="java.lang.String"/>
+    <parameter name="message_error" class="java.lang.String"/>
+    <parameter name="execution_date" class="java.lang.String"/>
+    <parameter name="frequency_value" class="java.lang.String"/>
+    <parameter name="numberPending" class="java.lang.String"/>
+
+    <queryString><![CDATA[]]></queryString>
+
+    <field name="beneficiaryBank" class="java.lang.String"/>
+    <field name="beneficiaryAccount" class="java.lang.String"/>
+    <field name="transactionDescription" class="java.lang.String"/>
+    <field name="statusDescription" class="java.lang.String"/>
+    <field name="beneficiaryName" class="java.lang.String"/>
+    <field name="transactionAmount" class="java.lang.String"/>
+    <field name="beneficiaryBankCode" class="java.lang.String"/>
+
+    <background>
+        <band splitType="Stretch"/>
+    </background>
+
+    <title>
+        <band height="56" splitType="Stretch">
+            <image>
+                <reportElement x="430" y="4" width="141" height="40"/>
+                <imageExpression><![CDATA[$P{IMGLOGO}]]></imageExpression>
+            </image>
+            <textField>
+                <reportElement x="0" y="0" width="360" height="20"/>
+                <textElement>
+                    <font size="14" isBold="true"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{USUARIO}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="0" y="22" width="360" height="20"/>
+                <textElement>
+                    <font size="9"/>
+                </textElement>
+                <textFieldExpression><![CDATA[$P{FECHA}]]></textFieldExpression>
+            </textField>
+        </band>
+    </title>
+
+    <pageHeader>
+        <band height="520" splitType="Stretch">
+            <staticText>
+                <reportElement x="0" y="0" width="260" height="20"/>
+                <textElement>
+                    <font size="12" isBold="true"/>
+                </textElement>
+                <text><![CDATA[Información general]]></text>
+            </staticText>
+
+            <staticText>
+                <reportElement x="0" y="24" width="120" height="20"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8"/></textElement>
+                <text><![CDATA[Transacción:]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="120" y="24" width="150" height="20"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8" isBold="true"/></textElement>
+                <textFieldExpression><![CDATA[$P{transaction_type}]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement x="291" y="24" width="120" height="20"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8"/></textElement>
+                <text><![CDATA[Número comprobante:]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="411" y="24" width="150" height="20"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8" isBold="true"/></textElement>
+                <textFieldExpression><![CDATA[$P{voucher}]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement x="0" y="46" width="120" height="28"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8"/></textElement>
+                <text><![CDATA[Cuenta origen:]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="120" y="46" width="150" height="28"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8" isBold="true"/></textElement>
+                <textFieldExpression><![CDATA[$P{origin_account_name} + "-" + $P{origin_account_type} + "-" + $P{origin_account}]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement x="291" y="46" width="120" height="28"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8"/></textElement>
+                <text><![CDATA[Estado:]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="411" y="46" width="150" height="28"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8" isBold="true"/></textElement>
+                <textFieldExpression><![CDATA[$P{status} + " " + $P{message_error}]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement x="0" y="82" width="120" height="20"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8"/></textElement>
+                <text><![CDATA[Descripción:]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="120" y="82" width="441" height="20"/>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8" isBold="true"/></textElement>
+                <textFieldExpression><![CDATA[$P{description}]]></textFieldExpression>
+            </textField>
+
+            <staticText>
+                <reportElement x="0" y="112" width="230" height="20"/>
+                <textElement><font size="12" isBold="true"/></textElement>
+                <text><![CDATA[Información de aprobación]]></text>
+            </staticText>
+
+            <frame>
+                <reportElement x="0" y="136" width="560" height="128"/>
+                <box padding="2">
+                    <pen lineWidth="0.5"/>
+                    <topPen lineWidth="0.5"/>
+                    <leftPen lineWidth="0.5"/>
+                    <bottomPen lineWidth="0.5"/>
+                    <rightPen lineWidth="0.5"/>
+                </box>
+
+                <componentElement>
+                    <reportElement x="0" y="0" width="560" height="124"/>
+                    <jr:table>
+                        <datasetRun subDataset="DatasetAprobadores">
+                            <dataSourceExpression><![CDATA[$P{APROBADORES}]]></dataSourceExpression>
+                        </datasetRun>
+
+                        <jr:column width="220">
+                            <jr:tableHeader style="Table_TH" height="24">
+                                <staticText>
+                                    <reportElement x="0" y="0" width="220" height="24"/>
+                                    <textElement textAlignment="Center"><font size="10"/></textElement>
+                                    <text><![CDATA[Nombre]]></text>
+                                </staticText>
+                            </jr:tableHeader>
+                            <jr:columnHeader style="Table_CH" height="20">
+                                <staticText>
+                                    <reportElement x="0" y="0" width="220" height="20"/>
+                                    <textElement textAlignment="Center"><font size="8"/></textElement>
+                                    <text><![CDATA[Aprobador]]></text>
+                                </staticText>
+                            </jr:columnHeader>
+                            <jr:detailCell style="Table_TD" height="20">
+                                <textField>
+                                    <reportElement x="4" y="2" width="212" height="16"/>
+                                    <textElement><font size="8"/></textElement>
+                                    <textFieldExpression><![CDATA[$F{name}]]></textFieldExpression>
+                                </textField>
+                            </jr:detailCell>
+                        </jr:column>
+
+                        <jr:column width="120">
+                            <jr:tableHeader style="Table_TH" height="24">
+                                <staticText>
+                                    <reportElement x="0" y="0" width="120" height="24"/>
+                                    <textElement textAlignment="Center"><font size="10"/></textElement>
+                                    <text><![CDATA[Fecha]]></text>
+                                </staticText>
+                            </jr:tableHeader>
+                            <jr:columnHeader style="Table_CH" height="20">
+                                <staticText>
+                                    <reportElement x="0" y="0" width="120" height="20"/>
+                                    <textElement textAlignment="Center"><font size="8"/></textElement>
+                                    <text><![CDATA[Fecha]]></text>
+                                </staticText>
+                            </jr:columnHeader>
+                            <jr:detailCell style="Table_TD" height="20">
+                                <textField>
+                                    <reportElement x="4" y="2" width="112" height="16"/>
+                                    <textElement><font size="8"/></textElement>
+                                    <textFieldExpression><![CDATA[$F{fecha}]]></textFieldExpression>
+                                </textField>
+                            </jr:detailCell>
+                        </jr:column>
+
+                        <jr:column width="120">
+                            <jr:tableHeader style="Table_TH" height="24">
+                                <staticText>
+                                    <reportElement x="0" y="0" width="120" height="24"/>
+                                    <textElement textAlignment="Center"><font size="10"/></textElement>
+                                    <text><![CDATA[Estado]]></text>
+                                </staticText>
+                            </jr:tableHeader>
+                            <jr:columnHeader style="Table_CH" height="20">
+                                <staticText>
+                                    <reportElement x="0" y="0" width="120" height="20"/>
+                                    <textElement textAlignment="Center"><font size="8"/></textElement>
+                                    <text><![CDATA[Estado]]></text>
+                                </staticText>
+                            </jr:columnHeader>
+                            <jr:detailCell style="Table_TD" height="20">
+                                <textField>
+                                    <reportElement x="4" y="2" width="112" height="16"/>
+                                    <textElement><font size="8"/></textElement>
+                                    <textFieldExpression><![CDATA[$F{status}]]></textFieldExpression>
+                                </textField>
+                            </jr:detailCell>
+                        </jr:column>
+
+                        <jr:column width="100">
+                            <jr:tableHeader style="Table_TH" height="24">
+                                <staticText>
+                                    <reportElement x="0" y="0" width="100" height="24"/>
+                                    <textElement textAlignment="Center"><font size="10"/></textElement>
+                                    <text><![CDATA[Nivel]]></text>
+                                </staticText>
+                            </jr:tableHeader>
+                            <jr:columnHeader style="Table_CH" height="20">
+                                <staticText>
+                                    <reportElement x="0" y="0" width="100" height="20"/>
+                                    <textElement textAlignment="Center"><font size="8"/></textElement>
+                                    <text><![CDATA[Nivel]]></text>
+                                </staticText>
+                            </jr:columnHeader>
+                            <jr:detailCell style="Table_TD" height="20">
+                                <textField>
+                                    <reportElement x="4" y="2" width="92" height="16"/>
+                                    <textElement><font size="8"/></textElement>
+                                    <textFieldExpression><![CDATA[$F{level}]]></textFieldExpression>
+                                </textField>
+                            </jr:detailCell>
+                        </jr:column>
+                    </jr:table>
+                </componentElement>
+            </frame>
+
+            <staticText>
+                <reportElement x="0" y="276" width="230" height="20"/>
+                <textElement><font size="12" isBold="true"/></textElement>
+                <text><![CDATA[Resumen de lote]]></text>
+            </staticText>
+            <staticText>
+                <reportElement x="0" y="300" width="120" height="20">
+                    <printWhenExpression><![CDATA[$P{preparation_type} == "L"]]></printWhenExpression>
+                </reportElement>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8"/></textElement>
+                <text><![CDATA[Cantidad de registros]]></text>
+            </staticText>
+            <textField>
+                <reportElement x="120" y="300" width="150" height="20">
+                    <printWhenExpression><![CDATA[$P{preparation_type} == "L"]]></printWhenExpression>
+                </reportElement>
+                <box>
+                    <pen lineWidth="1.0"/>
+                    <topPen lineWidth="0.0"/>
+                    <leftPen lineWidth="0.0"/>
+                    <bottomPen lineWidth="1.0" lineColor="#BFBFBF"/>
+                    <rightPen lineWidth="0.0"/>
+                </box>
+                <textElement><font size="8" isBold="true"/></textElement>
+                <textFieldExpression><![CDATA[$P{total_transactions}]]></textFieldExpression>
+            </textField>
+        </band>
+    </pageHeader>
+
+    <columnHeader>
+        <band height="32" splitType="Stretch">
+            <printWhenExpression><![CDATA[$P{preparation_type} == "L"]]></printWhenExpression>
+            <staticText>
+                <reportElement mode="Opaque" x="0" y="0" width="82" height="32" forecolor="#FFFFFF" backcolor="#2C2A29"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement>
+                <text><![CDATA[Número de registro]]></text>
+            </staticText>
+            <staticText>
+                <reportElement mode="Opaque" x="82" y="0" width="82" height="32" forecolor="#FFFFFF" backcolor="#2C2A29"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement>
+                <text><![CDATA[Cuenta beneficiario]]></text>
+            </staticText>
+            <staticText>
+                <reportElement mode="Opaque" x="164" y="0" width="82" height="32" forecolor="#FFFFFF" backcolor="#2C2A29"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement>
+                <text><![CDATA[Nombre]]></text>
+            </staticText>
+            <staticText>
+                <reportElement mode="Opaque" x="246" y="0" width="82" height="32" forecolor="#FFFFFF" backcolor="#2C2A29"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement>
+                <text><![CDATA[Banco]]></text>
+            </staticText>
+            <staticText>
+                <reportElement mode="Opaque" x="328" y="0" width="82" height="32" forecolor="#FFFFFF" backcolor="#2C2A29"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement>
+                <text><![CDATA[Monto]]></text>
+            </staticText>
+            <staticText>
+                <reportElement mode="Opaque" x="410" y="0" width="81" height="32" forecolor="#FFFFFF" backcolor="#2C2A29"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement>
+                <text><![CDATA[Descripción]]></text>
+            </staticText>
+            <staticText>
+                <reportElement mode="Opaque" x="491" y="0" width="81" height="32" forecolor="#FFFFFF" backcolor="#2C2A29"/>
+                <textElement textAlignment="Center" verticalAlignment="Middle"><font size="8" isBold="true"/></textElement>
+                <text><![CDATA[Estado]]></text>
+            </staticText>
+        </band>
+    </columnHeader>
+
+    <detail>
+        <band height="28" splitType="Stretch">
+            <textField>
+                <reportElement x="0" y="0" width="82" height="28"/>
+                <textElement textAlignment="Right"><font size="10"/></textElement>
+                <textFieldExpression><![CDATA[$P{id}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="82" y="0" width="82" height="28"/>
+                <textElement textAlignment="Right"><font size="8"/></textElement>
+                <textFieldExpression><![CDATA[$F{beneficiaryAccount}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="164" y="0" width="82" height="28"/>
+                <textElement textAlignment="Left"><font size="8"/></textElement>
+                <textFieldExpression><![CDATA[$F{beneficiaryName}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="246" y="0" width="82" height="28"/>
+                <textElement textAlignment="Left"><font size="8"/></textElement>
+                <textFieldExpression><![CDATA[$F{beneficiaryBank}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="328" y="0" width="82" height="28"/>
+                <textElement textAlignment="Right"><font size="8"/></textElement>
+                <textFieldExpression><![CDATA[$F{transactionAmount}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="410" y="0" width="81" height="28"/>
+                <textElement textAlignment="Left"><font size="8"/></textElement>
+                <textFieldExpression><![CDATA[$F{transactionDescription}]]></textFieldExpression>
+            </textField>
+            <textField>
+                <reportElement x="491" y="0" width="81" height="28"/>
+                <textElement textAlignment="Left"><font size="8"/></textElement>
+                <textFieldExpression><![CDATA[$F{statusDescription}]]></textFieldExpression>
+            </textField>
+        </band>
+    </detail>
+
+    <columnFooter>
+        <band splitType="Stretch"/>
+    </columnFooter>
+    <pageFooter>
+        <band splitType="Stretch"/>
+    </pageFooter>
+    <summary>
+        <band splitType="Stretch"/>
+    </summary>
+</jasperReport>

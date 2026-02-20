@@ -1,0 +1,120 @@
+{
+  "TITULAR": "Acme Corp",
+  "MONEDA": "USD",
+  "USUARIO": "usuario.demo",
+  "FECHA": "2026-02-20 09:30:00",
+  "levelone": [
+    {
+      "name": "Aprobador Nivel 1",
+      "status": "Aprobada",
+      "fecha": "2026-02-20 09:40",
+      "level": "1"
+    }
+  ],
+  "leveltwo": [
+    {
+      "name": "Aprobador Nivel 2",
+      "status": "Aprobada",
+      "fecha": "2026-02-20 09:45",
+      "level": "2"
+    }
+  ],
+  "id": 1001,
+  "transaction_type": "Transferencias internacionales",
+  "origin_account": "000123456789",
+  "origin_amount": 15420.75,
+  "voucher": 987654,
+  "lote_id": "L-2026-0001",
+  "description": "Pago de proveedores internacionales",
+  "detail": "Detalle de pago internacional de prueba para validacion de plantilla robusta",
+  "creation_date": "2026-02-20 09:15:00",
+  "status": "Pendiente aprobacion",
+  "prepare_user": "prep.demo",
+  "beneficiary_name": "Proveedor Demo LLC",
+  "beneficiary_account": "987654321000",
+  "beneficiary_bank_name": "Banco Destino Demo",
+  "economic_group_id": 501,
+  "preparation_type": "L",
+  "origin_account_name": "Cuenta Corriente Principal",
+  "origin_account_type": "CC",
+  "origin_currency": "USD",
+  "frequency_code": "WK",
+  "frequency_count": "12",
+  "start_date": "2026-03-01",
+  "finish_date": "2026-05-31",
+  "scheduled_time": "14:30",
+  "beneficiary_email": "beneficiario.demo@example.com",
+  "execution_type": "SCHEDULED",
+  "total_transactions": "3",
+  "debit_type": "D",
+  "APROBADORES": [
+    {
+      "name": "Aprobador Nivel 0",
+      "status": "Aprobada",
+      "fecha": "2026-02-20 09:35",
+      "level": "0"
+    },
+    {
+      "name": "Aprobador Nivel 1",
+      "status": "Aprobada",
+      "fecha": "2026-02-20 09:40",
+      "level": "1"
+    },
+    {
+      "name": "Aprobador Nivel 2",
+      "status": "Aprobada",
+      "fecha": "2026-02-20 09:45",
+      "level": "2"
+    },
+    {
+      "name": "Aprobador Nivel 3",
+      "status": "Aprobada",
+      "fecha": "2026-02-20 09:50",
+      "level": "3"
+    }
+  ],
+  "ISPRE": true,
+  "destination_amount_prepare": "15420.75",
+  "destination_currency": "EUR",
+  "destination_bank_swift_code": "DEMOESMMXXX",
+  "user": "usuario.final",
+  "prepare_user_fullname": "Preparador Demo Completo",
+  "reference": "REF-2026-0001",
+  "frequency_day": "Lunes",
+  "intermediary_bank_name": "Banco Intermediario Demo",
+  "intermediary_bank_swift_code": "INTBICMMXXX",
+  "charge": "OUR",
+  "message_error": "",
+  "execution_date": "2026-03-01 14:30:00",
+  "frequency_value": "1",
+  "numberPending": "1",
+
+  "beneficiaryBank": "Banco Beneficiario Demo",
+  "beneficiaryAccount": "987654321000",
+  "transactionDescription": "Transferencia internacional de prueba",
+  "statusDescription": "Sin novedad",
+  "beneficiaryName": "Proveedor Demo LLC",
+  "transactionAmount": "EUR 15,420.75",
+  "beneficiaryBankCode": "BICDESTXXX",
+
+  "_detail_rows_mock": [
+    {
+      "beneficiaryBank": "Banco Beneficiario Demo",
+      "beneficiaryAccount": "987654321000",
+      "transactionDescription": "Transferencia internacional de prueba 1",
+      "statusDescription": "Sin novedad",
+      "beneficiaryName": "Proveedor Demo LLC",
+      "transactionAmount": "EUR 10,000.00",
+      "beneficiaryBankCode": "BICDESTXXX"
+    },
+    {
+      "beneficiaryBank": "Banco Beneficiario Demo 2",
+      "beneficiaryAccount": "987654321111",
+      "transactionDescription": "Transferencia internacional de prueba 2",
+      "statusDescription": "Procesada",
+      "beneficiaryName": "Proveedor Demo BV",
+      "transactionAmount": "EUR 5,420.75",
+      "beneficiaryBankCode": "BICDST2XXX"
+    }
+  ]
+}

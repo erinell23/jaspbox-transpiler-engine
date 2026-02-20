@@ -52,6 +52,18 @@ Ejecutar comparación Jasper vs clase generada (`payment-report.jrxml`):
 mvn -q clean compile exec:java -Dexec.args=payment-compare
 ```
 
+Ejecutar con archivos externos (`jrxml` + `json`):
+
+```bash
+mvn -q clean compile exec:java -Dexec.args="run local-input/mi-reporte.jrxml local-input/mi-data.json"
+```
+
+Ejecutar con comparación Jasper incluida:
+
+```bash
+mvn -q clean compile exec:java -Dexec.args="run local-input/mi-reporte.jrxml local-input/mi-data.json --compare"
+```
+
 ## Salidas generadas
 
 - Fuente Java generada: `target/generated-sources/jaspbox/com/jaspbox/generated/*.java`
@@ -60,11 +72,14 @@ mvn -q clean compile exec:java -Dexec.args=payment-compare
 
 ## Cómo convertir un nuevo template (`.jrxml`)
 
-### 1) Agrega el JRXML
+Sugerencia para no versionar insumos de pruebas: usa la carpeta `local-input/` (está en `.gitignore`).
 
-Copia tu template en `src/main/resources`, por ejemplo:
+### 1) Agrega el JRXML y JSON
 
-`src/main/resources/my-report.jrxml`
+Copia tus archivos fuera de `src/main`, por ejemplo:
+
+- `local-input/my-report.jrxml`
+- `local-input/my-report-data.json`
 
 ### 2) Extrae entradas requeridas (parámetros y campos)
 
@@ -74,9 +89,30 @@ Puedes listar claves mínimas con:
 rg -n "<parameter name=|<field name=" src/main/resources/my-report.jrxml
 ```
 
-Con eso armas el `Map<String, Object>` de datos mock/dummy respetando tipos (`String`, `Integer`, `Double`, `Boolean`, listas, etc.).
+Con eso armas tu JSON con un objeto raíz (`Map<String, Object>`) respetando tipos (`String`, `Integer`, `Double`, `Boolean`, listas, etc.).
 
-### 3) Transpila
+### 3) Transpila y genera PDF
+
+Sin tocar código Java:
+
+```bash
+mvn -q clean compile exec:java -Dexec.args="run local-input/my-report.jrxml local-input/my-report-data.json"
+```
+
+Opciones útiles:
+
+```bash
+# Define nombre de clase generado
+mvn -q clean compile exec:java -Dexec.args="run local-input/my-report.jrxml local-input/my-report-data.json --class MyCustomTemplate"
+
+# Define nombre del PDF de salida
+mvn -q clean compile exec:java -Dexec.args="run local-input/my-report.jrxml local-input/my-report-data.json --out my-report-output.pdf"
+
+# Compara contra Jasper
+mvn -q clean compile exec:java -Dexec.args="run local-input/my-report.jrxml local-input/my-report-data.json --compare"
+```
+
+### 4) Transpila desde código (opcional)
 
 Forma más directa (desde código):
 
@@ -88,13 +124,13 @@ JaspBoxCompiler compiler = new JaspBoxCompiler();
 Path javaFile = compiler.transpile(jrxml, outSrc, "com.jaspbox.generated", "MyReportTemplate");
 ```
 
-### 4) Compila la clase generada
+### 5) Compila la clase generada
 
 Opción A: usar el flujo ya implementado en `Main` (recomendado).
 
 Opción B: compilar tú mismo la clase generada e incluir `pdfbox` en classpath.
 
-### 5) Usa la clase generada para renderizar PDF
+### 6) Usa la clase generada para renderizar PDF
 
 Contrato de la clase generada:
 

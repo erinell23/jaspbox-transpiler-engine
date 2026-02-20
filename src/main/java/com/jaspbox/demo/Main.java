@@ -1,5 +1,7 @@
 package com.jaspbox.demo;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jaspbox.compiler.JaspBoxCompiler;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
@@ -47,9 +49,16 @@ import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 
 public class Main {
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     public static void main(String[] args) throws Exception {
         Path projectRoot = Paths.get("").toAbsolutePath();
+
+        if (isDynamicRun(args)) {
+            runDynamicFromArgs(projectRoot, args);
+            return;
+        }
+
         RunMode runMode = RunMode.fromArgs(args);
 
         if (runMode == RunMode.PAYMENT_COMPARE) {
@@ -81,6 +90,164 @@ public class Main {
         System.out.println("Template generado en: " + result.generatedJava);
         System.out.println("Template compilado en: " + result.generatedClasses);
         System.out.println("PDF generado en: " + result.outputPdf);
+    }
+
+    private static boolean isDynamicRun(String[] args) {
+        if (args.length < 2) {
+            return false;
+        }
+        String first = args[0].trim().toLowerCase(Locale.ROOT);
+        if ("run".equals(first) || "render".equals(first)) {
+            return true;
+        }
+        return first.endsWith(".jrxml");
+    }
+
+    private static void runDynamicFromArgs(Path projectRoot, String[] args) throws Exception {
+        int index = 0;
+        if ("run".equalsIgnoreCase(args[0]) || "render".equalsIgnoreCase(args[0])) {
+            index = 1;
+        }
+
+        if (args.length < index + 2) {
+            throw new IllegalArgumentException(
+                    "Uso: run <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]");
+        }
+
+        String jrxmlArg = args[index];
+        String jsonArg = args[index + 1];
+        boolean compareWithJasper = false;
+        String className = null;
+        String outputPdfName = null;
+
+        for (int i = index + 2; i < args.length; i++) {
+            String arg = args[i];
+            if ("--compare".equalsIgnoreCase(arg)) {
+                compareWithJasper = true;
+                continue;
+            }
+            if ("--class".equalsIgnoreCase(arg)) {
+                if (i + 1 >= args.length) {
+                    throw new IllegalArgumentException("Falta valor para --class");
+                }
+                className = args[++i];
+                continue;
+            }
+            if ("--out".equalsIgnoreCase(arg)) {
+                if (i + 1 >= args.length) {
+                    throw new IllegalArgumentException("Falta valor para --out");
+                }
+                outputPdfName = args[++i];
+                continue;
+            }
+            throw new IllegalArgumentException("Argumento no soportado: " + arg);
+        }
+
+        Path jrxmlPath = resolveInputPath(projectRoot, jrxmlArg);
+        Path jsonPath = resolveInputPath(projectRoot, jsonArg);
+        validateInputFile(jrxmlPath, "JRXML");
+        validateInputFile(jsonPath, "JSON");
+
+        String templateBaseName = stripExtension(jrxmlPath.getFileName().toString());
+        String resolvedClassName =
+                className == null || className.isBlank()
+                        ? toJavaClassName(templateBaseName) + "Template"
+                        : className;
+        String resolvedOutputPdf =
+                outputPdfName == null || outputPdfName.isBlank()
+                        ? templateBaseName + "-generated.pdf"
+                        : outputPdfName;
+
+        Map<String, Object> data = loadDataFromJson(jsonPath);
+        ensureAllParametersPresent(jrxmlPath, data);
+
+        TranspileResult generatedResult =
+                runTranspiledReport(
+                        projectRoot, jrxmlPath, resolvedClassName, resolvedOutputPdf, data);
+
+        System.out.println("Template generado en: " + generatedResult.generatedJava);
+        System.out.println("Template compilado en: " + generatedResult.generatedClasses);
+        System.out.println("PDF clase generada en: " + generatedResult.outputPdf);
+
+        if (!compareWithJasper) {
+            return;
+        }
+
+        String jasperOutputName = templateBaseName + "-jasper.pdf";
+        Path jasperPdfPath = projectRoot.resolve("target/output/" + jasperOutputName);
+        Files.createDirectories(jasperPdfPath.getParent());
+        try {
+            generatePdfWithJasper(jrxmlPath, data, jasperPdfPath);
+            PdfComparisonResult comparisonResult =
+                    comparePdfs(jasperPdfPath, generatedResult.outputPdf);
+            System.out.println("PDF Jasper generado en: " + jasperPdfPath);
+            System.out.println("Comparación:");
+            System.out.println("  - bytes iguales: " + comparisonResult.bytesEqual);
+            System.out.println("  - páginas iguales: " + comparisonResult.pagesEqual);
+            System.out.println("  - texto igual: " + comparisonResult.textEqual);
+            System.out.println(
+                    String.format(
+                            Locale.US,
+                            "  - diferencia visual promedio: %.4f%%",
+                            comparisonResult.visualDifferenceRatio * 100d));
+            System.out.println("  - equivalencia general: " + comparisonResult.equivalent);
+        } catch (Exception compareError) {
+            System.err.println(
+                    "No fue posible comparar contra Jasper para " + jrxmlPath + ": "
+                            + compareError.getMessage());
+        }
+    }
+
+    private static Path resolveInputPath(Path projectRoot, String input) {
+        Path path = Paths.get(input);
+        if (!path.isAbsolute()) {
+            path = projectRoot.resolve(path);
+        }
+        return path.normalize();
+    }
+
+    private static void validateInputFile(Path path, String label) {
+        if (!Files.exists(path) || !Files.isRegularFile(path)) {
+            throw new IllegalArgumentException(label + " no encontrado: " + path);
+        }
+    }
+
+    private static String stripExtension(String fileName) {
+        int dot = fileName.lastIndexOf('.');
+        if (dot <= 0) {
+            return fileName;
+        }
+        return fileName.substring(0, dot);
+    }
+
+    private static String toJavaClassName(String rawName) {
+        String sanitized = rawName.replaceAll("[^A-Za-z0-9]+", " ").trim();
+        if (sanitized.isEmpty()) {
+            return "Report";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (String part : sanitized.split("\\s+")) {
+            if (part.isEmpty()) {
+                continue;
+            }
+            builder.append(Character.toUpperCase(part.charAt(0)));
+            if (part.length() > 1) {
+                builder.append(part.substring(1));
+            }
+        }
+        if (builder.length() == 0 || !Character.isJavaIdentifierStart(builder.charAt(0))) {
+            builder.insert(0, 'R');
+        }
+        return builder.toString();
+    }
+
+    private static Map<String, Object> loadDataFromJson(Path jsonPath) throws IOException {
+        Map<String, Object> parsed =
+                OBJECT_MAPPER.readValue(jsonPath.toFile(), new TypeReference<Map<String, Object>>() {});
+        if (parsed == null) {
+            return new LinkedHashMap<>();
+        }
+        return new LinkedHashMap<>(parsed);
     }
 
     private static void runPaymentComparison(Path projectRoot) throws Exception {
@@ -126,7 +293,17 @@ public class Main {
             String outputPdfName,
             Map<String, Object> data)
             throws Exception {
-        Path jrxmlPath = projectRoot.resolve(jrxmlRelativePath);
+        Path jrxmlPath = projectRoot.resolve(jrxmlRelativePath).normalize();
+        return runTranspiledReport(projectRoot, jrxmlPath, className, outputPdfName, data);
+    }
+
+    private static TranspileResult runTranspiledReport(
+            Path projectRoot,
+            Path jrxmlPath,
+            String className,
+            String outputPdfName,
+            Map<String, Object> data)
+            throws Exception {
         Path generatedSources = projectRoot.resolve("target/generated-sources/jaspbox");
         Path generatedClasses = projectRoot.resolve("target/generated-classes/jaspbox");
         Path outputPdf = projectRoot.resolve("target/output/" + outputPdfName);
@@ -615,4 +792,5 @@ public class Main {
             return level;
         }
     }
+
 }

@@ -1,190 +1,119 @@
 # JaspBox Transpiler Engine
 
-Motor en Java 11+ que transpila plantillas **JasperReports (`.jrxml`)** a una clase Java standalone que renderiza PDF con **Apache PDFBox 2.0.x**.
+Herramienta CLI en Java 11+ que convierte plantillas JasperReports (`.jrxml`) a clase Java standalone (PDFBox) y genera el PDF final a partir de datos JSON.
 
-El objetivo es eliminar JasperReports en tiempo de ejecución del reporte generado.
+## Qué hace
 
-## Stack
+1. Lee un `JRXML`.
+2. Genera una clase Java transpileada en `target/generated-sources/jaspbox`.
+3. Compila esa clase en `target/generated-classes/jaspbox`.
+4. Ejecuta el método `build(Map<String,Object>, String)` de la clase generada para producir el PDF.
 
-- Java 11+
-- Maven
-- JasperReports (`net.sf.jasperreports:jasperreports`) solo para parseo/compilación del diseño
-- JavaPoet (`com.squareup:javapoet`) para emitir el `.java`
-- PDFBox (`org.apache.pdfbox:pdfbox:2.0.x`) para render final
-
-## Estructura actual del proyecto
-
-- Compilador: `/Users/erinellbarba/Dev/java/jaspbox-transpiler-engine/src/main/java/com/jaspbox/compiler/JaspBoxCompiler.java`
-- Demo/runner: `/Users/erinellbarba/Dev/java/jaspbox-transpiler-engine/src/main/java/com/jaspbox/demo/Main.java`
-- Plantillas de ejemplo:
-  - `/Users/erinellbarba/Dev/java/jaspbox-transpiler-engine/src/main/resources/test.jrxml`
-  - `/Users/erinellbarba/Dev/java/jaspbox-transpiler-engine/src/main/resources/example-robust.jrxml`
-  - `/Users/erinellbarba/Dev/java/jaspbox-transpiler-engine/src/main/resources/payment-report.jrxml`
+Opcionalmente puede comparar el resultado contra Jasper (`--compare`).
 
 ## Requisitos
 
-- JDK 11+ (no solo JRE)
+- JDK 11+
 - Maven 3.8+
 
-## Comandos rápidos
+## Build e instalación
 
-Desde `/Users/erinellbarba/Dev/java/jaspbox-transpiler-engine`:
-
-```bash
-mvn clean compile
-```
-
-Ejecutar demo básica (`test.jrxml`):
+Compilar, testear y empaquetar:
 
 ```bash
-mvn -q clean compile exec:java
+mvn clean package
 ```
 
-Ejecutar demo robusta (`example-robust.jrxml`):
+Esto genera un jar ejecutable (fat jar):
+
+- `target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar`
+
+## Uso CLI
+
+### Ayuda
 
 ```bash
-mvn -q clean compile exec:java -Dexec.args=robust
+java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar --help
 ```
 
-Ejecutar comparación Jasper vs clase generada (`payment-report.jrxml`):
+### Comando principal
 
 ```bash
-mvn -q clean compile exec:java -Dexec.args=payment-compare
+java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
+  run <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]
 ```
 
-Ejecutar con archivos externos (`jrxml` + `json`):
+También soporta forma corta:
 
 ```bash
-mvn -q clean compile exec:java -Dexec.args="run local-input/mi-reporte.jrxml local-input/mi-data.json"
+java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
+  <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]
 ```
 
-Ejecutar con comparación Jasper incluida:
+### Ejemplos
 
 ```bash
-mvn -q clean compile exec:java -Dexec.args="run local-input/mi-reporte.jrxml local-input/mi-data.json --compare"
+java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
+  run local-input/payment-report.jrxml local-input/payment-report.json
 ```
-
-## Salidas generadas
-
-- Fuente Java generada: `target/generated-sources/jaspbox/com/jaspbox/generated/*.java`
-- Clases compiladas: `target/generated-classes/jaspbox`
-- PDFs: `target/output/*.pdf`
-
-## Cómo convertir un nuevo template (`.jrxml`)
-
-Sugerencia para no versionar insumos de pruebas: usa la carpeta `local-input/` (está en `.gitignore`).
-
-### 1) Agrega el JRXML y JSON
-
-Copia tus archivos fuera de `src/main`, por ejemplo:
-
-- `local-input/my-report.jrxml`
-- `local-input/my-report-data.json`
-
-### 2) Extrae entradas requeridas (parámetros y campos)
-
-Puedes listar claves mínimas con:
 
 ```bash
-rg -n "<parameter name=|<field name=" src/main/resources/my-report.jrxml
+java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
+  run local-input/payment-report.jrxml local-input/payment-report.json \
+  --class PaymentReportTemplate --out payment-generated.pdf --compare
 ```
 
-Con eso armas tu JSON con un objeto raíz (`Map<String, Object>`) respetando tipos (`String`, `Integer`, `Double`, `Boolean`, listas, etc.).
-
-### 3) Transpila y genera PDF
-
-Sin tocar código Java:
+## Uso con Maven (sin jar)
 
 ```bash
-mvn -q clean compile exec:java -Dexec.args="run local-input/my-report.jrxml local-input/my-report-data.json"
+mvn -q compile exec:java -Dexec.args="run local-input/payment-report.jrxml local-input/payment-report.json"
 ```
 
-Opciones útiles:
+## Salidas
+
+- Clase Java generada: `target/generated-sources/jaspbox/com/jaspbox/generated/*.java`
+- Clase compilada: `target/generated-classes/jaspbox`
+- PDF generado: `target/output/*.pdf`
+- PDF Jasper (si `--compare`): `target/output/*-jasper.pdf`
+
+## Formato JSON esperado
+
+El JSON debe ser un objeto raíz (`Map<String,Object>`) con claves que coincidan con los parámetros/campos usados por el JRXML.
+
+Ejemplo:
+
+```json
+{
+  "TITLE": "Reporte",
+  "SHOW_SUBTITLE": true,
+  "TABLE_ROWS": [
+    {"ITEM": "Servicio A", "AMOUNT": 100.5}
+  ]
+}
+```
+
+## Insumos fuera del repositorio
+
+Para evitar versionar archivos de entrada, usa `local-input/`.
+
+Ya está ignorado en `.gitignore`:
+
+- `local-input/`
+
+## Stack técnico
+
+- Java 11+
+- Maven
+- JasperReports (parse/validación del JRXML)
+- JavaPoet (generación de fuente Java)
+- Apache PDFBox 2.0.x (render del PDF final)
+
+## Tests
+
+Ejecutar tests:
 
 ```bash
-# Define nombre de clase generado
-mvn -q clean compile exec:java -Dexec.args="run local-input/my-report.jrxml local-input/my-report-data.json --class MyCustomTemplate"
-
-# Define nombre del PDF de salida
-mvn -q clean compile exec:java -Dexec.args="run local-input/my-report.jrxml local-input/my-report-data.json --out my-report-output.pdf"
-
-# Compara contra Jasper
-mvn -q clean compile exec:java -Dexec.args="run local-input/my-report.jrxml local-input/my-report-data.json --compare"
+mvn test
 ```
 
-### 4) Transpila desde código (opcional)
-
-Forma más directa (desde código):
-
-```java
-Path jrxml = Paths.get("src/main/resources/my-report.jrxml");
-Path outSrc = Paths.get("target/generated-sources/jaspbox");
-
-JaspBoxCompiler compiler = new JaspBoxCompiler();
-Path javaFile = compiler.transpile(jrxml, outSrc, "com.jaspbox.generated", "MyReportTemplate");
-```
-
-### 5) Compila la clase generada
-
-Opción A: usar el flujo ya implementado en `Main` (recomendado).
-
-Opción B: compilar tú mismo la clase generada e incluir `pdfbox` en classpath.
-
-### 6) Usa la clase generada para renderizar PDF
-
-Contrato de la clase generada:
-
-```java
-public void build(Map<String, Object> data, String outputPath) throws IOException
-```
-
-Uso:
-
-```java
-Map<String, Object> data = new LinkedHashMap<>();
-// data.put("PARAM", valor); ...
-
-new com.jaspbox.generated.MyReportTemplate()
-    .build(data, "target/output/my-report.pdf");
-```
-
-## Validación contra Jasper (recomendado)
-
-Para validar fidelidad visual, usa la estrategia de `payment-compare` en `Main`:
-
-1. Generar PDF con Jasper original.
-2. Generar PDF con la clase transpileada.
-3. Comparar:
-- páginas
-- texto normalizado
-- diferencia visual promedio
-
-Esto ya está implementado en:
-
-- `/Users/erinellbarba/Dev/java/jaspbox-transpiler-engine/src/main/java/com/jaspbox/demo/Main.java`
-
-## Uso en otro proyecto (runtime sin Jasper)
-
-Para consumir una clase ya generada fuera de este repo:
-
-1. Copia la clase generada (`MyReportTemplate.java`) a tu proyecto.
-2. Asegura dependencia runtime de PDFBox 2.0.x.
-3. Construye el `Map<String,Object>` con las claves esperadas del template.
-4. Llama `build(data, outputPath)`.
-
-Nota: el template generado no requiere JasperReports en runtime para dibujar el PDF final.
-
-## Consideraciones importantes
-
-- Mantén tipos correctos en `data` para evitar `ClassCastException`/errores de evaluación.
-- No envuelvas ni reemplaces el `Map` si usas una implementación custom/mock para tests.
-- Si el template usa expresiones complejas, valida siempre con comparación contra Jasper.
-
-## Próximo flujo sugerido para nuevos reportes
-
-1. Crear `src/main/resources/<nombre>.jrxml`
-2. Crear método `build<Nombre>Data()` en `Main`
-3. Invocar `runTranspiledReport(...)` con ese JRXML
-4. (Opcional) crear modo `-Dexec.args=<nombre>-compare` para comparar con Jasper
-
-Con eso tendrás un pipeline repetible para onboardear nuevos templates.
+Incluye smoke tests de CLI en `src/test/java/com/jaspbox/demo/MainTest.java`.

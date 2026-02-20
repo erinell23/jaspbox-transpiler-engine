@@ -17,8 +17,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -48,138 +48,88 @@ import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
 
-public class Main {
+public final class Main {
+
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
-    public static void main(String[] args) throws Exception {
-        Path projectRoot = Paths.get("").toAbsolutePath();
+    private static final int EXIT_SUCCESS = 0;
+    private static final int EXIT_RUNTIME_ERROR = 1;
+    private static final int EXIT_INVALID_USAGE = 2;
 
-        if (isDynamicRun(args)) {
-            runDynamicFromArgs(projectRoot, args);
-            return;
+    private Main() {}
+
+    public static void main(String[] args) {
+        int exitCode = run(args);
+        if (exitCode != EXIT_SUCCESS) {
+            System.exit(exitCode);
         }
-
-        RunMode runMode = RunMode.fromArgs(args);
-
-        if (runMode == RunMode.PAYMENT_COMPARE) {
-            runPaymentComparison(projectRoot);
-            return;
-        }
-
-        if (runMode == RunMode.ROBUST) {
-            TranspileResult result =
-                    runTranspiledReport(
-                            projectRoot,
-                            "src/main/resources/example-robust.jrxml",
-                            "ExampleRobustTemplate",
-                            "example-robust-output.pdf",
-                            buildRobustData());
-            System.out.println("Template generado en: " + result.generatedJava);
-            System.out.println("Template compilado en: " + result.generatedClasses);
-            System.out.println("PDF generado en: " + result.outputPdf);
-            return;
-        }
-
-        TranspileResult result =
-                runTranspiledReport(
-                        projectRoot,
-                        "src/main/resources/test.jrxml",
-                        "Template",
-                        "template-output.pdf",
-                        buildDemoData());
-        System.out.println("Template generado en: " + result.generatedJava);
-        System.out.println("Template compilado en: " + result.generatedClasses);
-        System.out.println("PDF generado en: " + result.outputPdf);
     }
 
-    private static boolean isDynamicRun(String[] args) {
-        if (args.length < 2) {
-            return false;
+    static int run(String[] args) {
+        if (args == null || args.length == 0) {
+            printUsage(System.err);
+            return EXIT_INVALID_USAGE;
         }
-        String first = args[0].trim().toLowerCase(Locale.ROOT);
-        if ("run".equals(first) || "render".equals(first)) {
-            return true;
+
+        if (isHelpArg(args[0])) {
+            printUsage(System.out);
+            return EXIT_SUCCESS;
         }
-        return first.endsWith(".jrxml");
+
+        try {
+            Path projectRoot = Paths.get("").toAbsolutePath();
+            ParsedArgs parsed = ParsedArgs.parse(args);
+            executeRun(projectRoot, parsed);
+            return EXIT_SUCCESS;
+        } catch (IllegalArgumentException usageError) {
+            System.err.println("Error de uso: " + usageError.getMessage());
+            printUsage(System.err);
+            return EXIT_INVALID_USAGE;
+        } catch (Exception runtimeError) {
+            System.err.println("Error ejecutando convertidor: " + runtimeError.getMessage());
+            runtimeError.printStackTrace(System.err);
+            return EXIT_RUNTIME_ERROR;
+        }
     }
 
-    private static void runDynamicFromArgs(Path projectRoot, String[] args) throws Exception {
-        int index = 0;
-        if ("run".equalsIgnoreCase(args[0]) || "render".equalsIgnoreCase(args[0])) {
-            index = 1;
-        }
+    private static void executeRun(Path projectRoot, ParsedArgs parsed) throws Exception {
+        Path jrxmlPath = resolveInputPath(projectRoot, parsed.jrxmlArg);
+        Path jsonPath = resolveInputPath(projectRoot, parsed.jsonArg);
 
-        if (args.length < index + 2) {
-            throw new IllegalArgumentException(
-                    "Uso: run <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]");
-        }
-
-        String jrxmlArg = args[index];
-        String jsonArg = args[index + 1];
-        boolean compareWithJasper = false;
-        String className = null;
-        String outputPdfName = null;
-
-        for (int i = index + 2; i < args.length; i++) {
-            String arg = args[i];
-            if ("--compare".equalsIgnoreCase(arg)) {
-                compareWithJasper = true;
-                continue;
-            }
-            if ("--class".equalsIgnoreCase(arg)) {
-                if (i + 1 >= args.length) {
-                    throw new IllegalArgumentException("Falta valor para --class");
-                }
-                className = args[++i];
-                continue;
-            }
-            if ("--out".equalsIgnoreCase(arg)) {
-                if (i + 1 >= args.length) {
-                    throw new IllegalArgumentException("Falta valor para --out");
-                }
-                outputPdfName = args[++i];
-                continue;
-            }
-            throw new IllegalArgumentException("Argumento no soportado: " + arg);
-        }
-
-        Path jrxmlPath = resolveInputPath(projectRoot, jrxmlArg);
-        Path jsonPath = resolveInputPath(projectRoot, jsonArg);
         validateInputFile(jrxmlPath, "JRXML");
         validateInputFile(jsonPath, "JSON");
 
         String templateBaseName = stripExtension(jrxmlPath.getFileName().toString());
         String resolvedClassName =
-                className == null || className.isBlank()
+                parsed.className == null || parsed.className.isBlank()
                         ? toJavaClassName(templateBaseName) + "Template"
-                        : className;
+                        : parsed.className;
         String resolvedOutputPdf =
-                outputPdfName == null || outputPdfName.isBlank()
+                parsed.outputPdfName == null || parsed.outputPdfName.isBlank()
                         ? templateBaseName + "-generated.pdf"
-                        : outputPdfName;
+                        : parsed.outputPdfName;
 
         Map<String, Object> data = loadDataFromJson(jsonPath);
         ensureAllParametersPresent(jrxmlPath, data);
 
         TranspileResult generatedResult =
-                runTranspiledReport(
-                        projectRoot, jrxmlPath, resolvedClassName, resolvedOutputPdf, data);
+                runTranspiledReport(projectRoot, jrxmlPath, resolvedClassName, resolvedOutputPdf, data);
 
         System.out.println("Template generado en: " + generatedResult.generatedJava);
         System.out.println("Template compilado en: " + generatedResult.generatedClasses);
         System.out.println("PDF clase generada en: " + generatedResult.outputPdf);
 
-        if (!compareWithJasper) {
+        if (!parsed.compareWithJasper) {
             return;
         }
 
         String jasperOutputName = templateBaseName + "-jasper.pdf";
         Path jasperPdfPath = projectRoot.resolve("target/output/" + jasperOutputName);
         Files.createDirectories(jasperPdfPath.getParent());
+
         try {
             generatePdfWithJasper(jrxmlPath, data, jasperPdfPath);
-            PdfComparisonResult comparisonResult =
-                    comparePdfs(jasperPdfPath, generatedResult.outputPdf);
+            PdfComparisonResult comparisonResult = comparePdfs(jasperPdfPath, generatedResult.outputPdf);
             System.out.println("PDF Jasper generado en: " + jasperPdfPath);
             System.out.println("Comparación:");
             System.out.println("  - bytes iguales: " + comparisonResult.bytesEqual);
@@ -196,6 +146,30 @@ public class Main {
                     "No fue posible comparar contra Jasper para " + jrxmlPath + ": "
                             + compareError.getMessage());
         }
+    }
+
+    private static boolean isHelpArg(String arg) {
+        if (arg == null) {
+            return false;
+        }
+        String normalized = arg.trim().toLowerCase(Locale.ROOT);
+        return "-h".equals(normalized)
+                || "--help".equals(normalized)
+                || "help".equals(normalized)
+                || "ayuda".equals(normalized);
+    }
+
+    private static void printUsage(java.io.PrintStream out) {
+        out.println("Uso:");
+        out.println("  run <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]");
+        out.println();
+        out.println("También soporta forma corta:");
+        out.println("  <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]");
+        out.println();
+        out.println("Ejemplos:");
+        out.println("  run local-input/payment-report.jrxml local-input/payment-report.json");
+        out.println(
+                "  run local-input/payment-report.jrxml local-input/payment-report.json --compare --class PaymentTemplate --out payment.pdf");
     }
 
     private static Path resolveInputPath(Path projectRoot, String input) {
@@ -225,6 +199,7 @@ public class Main {
         if (sanitized.isEmpty()) {
             return "Report";
         }
+
         StringBuilder builder = new StringBuilder();
         for (String part : sanitized.split("\\s+")) {
             if (part.isEmpty()) {
@@ -235,9 +210,17 @@ public class Main {
                 builder.append(part.substring(1));
             }
         }
+
         if (builder.length() == 0 || !Character.isJavaIdentifierStart(builder.charAt(0))) {
             builder.insert(0, 'R');
         }
+
+        for (int i = 1; i < builder.length(); i++) {
+            if (!Character.isJavaIdentifierPart(builder.charAt(i))) {
+                builder.setCharAt(i, '_');
+            }
+        }
+
         return builder.toString();
     }
 
@@ -248,53 +231,6 @@ public class Main {
             return new LinkedHashMap<>();
         }
         return new LinkedHashMap<>(parsed);
-    }
-
-    private static void runPaymentComparison(Path projectRoot) throws Exception {
-        Path jrxmlPath = projectRoot.resolve("src/main/resources/payment-report.jrxml");
-        Map<String, Object> data = buildPaymentReportData();
-        ensureAllParametersPresent(jrxmlPath, data);
-
-        TranspileResult generatedResult =
-                runTranspiledReport(
-                        projectRoot,
-                        "src/main/resources/payment-report.jrxml",
-                        "PaymentReportTemplate",
-                        "payment-report-generated.pdf",
-                        data);
-
-        Path jasperPdfPath = projectRoot.resolve("target/output/payment-report-jasper.pdf");
-        Files.createDirectories(jasperPdfPath.getParent());
-        generatePdfWithJasper(jrxmlPath, data, jasperPdfPath);
-
-        PdfComparisonResult comparisonResult =
-                comparePdfs(jasperPdfPath, generatedResult.outputPdf);
-
-        System.out.println("Template generado en: " + generatedResult.generatedJava);
-        System.out.println("Template compilado en: " + generatedResult.generatedClasses);
-        System.out.println("PDF Jasper generado en: " + jasperPdfPath);
-        System.out.println("PDF Clase generada en: " + generatedResult.outputPdf);
-        System.out.println("Comparación:");
-        System.out.println("  - bytes iguales: " + comparisonResult.bytesEqual);
-        System.out.println("  - páginas iguales: " + comparisonResult.pagesEqual);
-        System.out.println("  - texto igual: " + comparisonResult.textEqual);
-        System.out.println(
-                String.format(
-                        Locale.US,
-                        "  - diferencia visual promedio: %.4f%%",
-                        comparisonResult.visualDifferenceRatio * 100d));
-        System.out.println("  - equivalencia general: " + comparisonResult.equivalent);
-    }
-
-    private static TranspileResult runTranspiledReport(
-            Path projectRoot,
-            String jrxmlRelativePath,
-            String className,
-            String outputPdfName,
-            Map<String, Object> data)
-            throws Exception {
-        Path jrxmlPath = projectRoot.resolve(jrxmlRelativePath).normalize();
-        return runTranspiledReport(projectRoot, jrxmlPath, className, outputPdfName, data);
     }
 
     private static TranspileResult runTranspiledReport(
@@ -448,10 +384,8 @@ public class Main {
         long differentPixels = 0L;
         long totalPixels = 0L;
         for (int pageIndex = 0; pageIndex < pageCount; pageIndex++) {
-            BufferedImage leftImage =
-                    leftRenderer.renderImageWithDPI(pageIndex, 72f, ImageType.RGB);
-            BufferedImage rightImage =
-                    rightRenderer.renderImageWithDPI(pageIndex, 72f, ImageType.RGB);
+            BufferedImage leftImage = leftRenderer.renderImageWithDPI(pageIndex, 72f, ImageType.RGB);
+            BufferedImage rightImage = rightRenderer.renderImageWithDPI(pageIndex, 72f, ImageType.RGB);
 
             int width = Math.max(leftImage.getWidth(), rightImage.getWidth());
             int height = Math.max(leftImage.getHeight(), rightImage.getHeight());
@@ -510,11 +444,7 @@ public class Main {
             Iterable<? extends JavaFileObject> units =
                     fileManager.getJavaFileObjectsFromFiles(List.of(javaFile.toFile()));
             List<String> options =
-                    List.of(
-                            "-classpath",
-                            buildCompilerClasspath(),
-                            "-d",
-                            outputClassesDir.toString());
+                    List.of("-classpath", buildCompilerClasspath(), "-d", outputClassesDir.toString());
 
             JavaCompiler.CompilationTask task =
                     javaCompiler.getTask(null, fileManager, diagnostics, options, null, units);
@@ -584,149 +514,71 @@ public class Main {
         }
     }
 
-    private static Map<String, Object> buildDemoData() {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("TITLE", "Estado de cuenta - Cliente Demo");
-        data.put("SHOW_SUBTITLE", Boolean.TRUE);
+    private static final class ParsedArgs {
+        private final String jrxmlArg;
+        private final String jsonArg;
+        private final boolean compareWithJasper;
+        private final String className;
+        private final String outputPdfName;
 
-        List<Map<String, Object>> rows = new ArrayList<>();
-        rows.add(row("Suscripcion mensual", 49.90d));
-        rows.add(row("Soporte premium", 19.50d));
-        rows.add(row("Consumo adicional", 12.30d));
-        data.put("TABLE_ROWS", rows);
-
-        return data;
-    }
-
-    private static Map<String, Object> buildRobustData() {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("IMGLOGO", "iVBORw0KGgoAAAANSUhEUgAAAPAAAAAqCAMAAAC6LibpAAAC7lBMVEUAAAAAAAAAAABVAABAQEAzMzMrKyskJCQgICA5HBwzMzMuLi4rKysnJyckJCQzIiIwMDAtLS0rKysoKCgmJiYxJCQuLi4sLCwpKSknJycvJiYuLiQsLCwrKyspKSkwKCguJyctLSYsLCwrKyspKSkvKCguJyctLSYsLCwrKysqKiouKSktKCgsLCcrKysrKysqKiouKSktKCgsLCcrKysrKysqKiouKSktKCgsLCgrKycrKysuKiotKSktKCgsLCgrKycrKysuKiotKSksKSksLCgrKygrKystKiotKSksKSksLCgrKygrKystKiotKSksKSksLCgrKygrKystKiosKiosKSkrKSkrKygtKygtKiosKiosKSkrKSkrKygtKygtKiosKiosKSkrKSkrKygtKygtKiosKiosKSkrKSkrKyktKygsKiosKiosKSkrKSkrKyksKigsKiosKSkrKSktKyktKygsKigsKiosKSkrKSktKyktKygsKigsKiorKiorKSktKyksKyksKigsKiorKiorKSktKyksKyksKigsKiorKiorKSktKyksKyksKigsKigrKiotKSksKyksKyksKiksKigrKiotKSksKyksKyksKiksKigrKiotKSksKyksKyksKiksKigrKiotKSksKyksKyksKiksKiktKigsKiosKSksKykrKiktKigsKiosKSksKyksKikrKiktKigsKiosKSksKikrKiktKigsKiosKSksKyksKikrKiksKiksKiosKSksKyksKiktKiksKiksKigsKSksKyksKiktKiksKiksKigsKyksKiktKiksKiksKiksKiosKykrKiksKiksKiksKiksKiosKykrKiksKiksKiksKiksKigsKyktKiksKiksKiksKigsKiksKiksKiksKiksKiksKyksKiksKiksKiksKiksKiksKyksKiksKiksKiksKiksKiksKyksKiksKiksKin///9eCUvOAAAA+HRSTlMAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVpbXF1eX2Bh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");
-        data.put("TITULAR", "Acme Corp");
-        data.put("MONEDA", "USD");
-        data.put("USUARIO", "usuario.demo");
-        data.put("FECHA", "2026-02-20 09:30:00");
-        data.put("id", 1001);
-        data.put("transaction_type", "Transferencias internacionales");
-        data.put("origin_account", "000123456789");
-        data.put("origin_amount", 15420.75d);
-        data.put("voucher", 987654);
-        data.put("lote_id", "L-2026-0001");
-        data.put("description", "Pago de proveedores internacionales");
-        data.put("detail", "Detalle de pago internacional de prueba");
-        data.put("creation_date", "2026-02-20 09:15:00");
-        data.put("status", "Pendiente aprobación");
-        data.put("prepare_user", "prep.demo");
-        data.put("beneficiary_name", "Proveedor Demo LLC");
-        data.put("beneficiary_account", "987654321000");
-        data.put("beneficiary_bank_name", "Banco Destino Demo");
-        data.put("economic_group_id", 501);
-        data.put("preparation_type", "L");
-        data.put("origin_account_name", "Cuenta Corriente Principal");
-        data.put("origin_account_type", "CC");
-        data.put("origin_currency", "USD");
-        data.put("frequency_code", "WK");
-        data.put("frequency_count", "12");
-        data.put("start_date", "2026-03-01");
-        data.put("finish_date", "2026-05-31");
-        data.put("scheduled_time", "14:30");
-        data.put("beneficiary_email", "beneficiario.demo@example.com");
-        data.put("execution_type", "SCHEDULED");
-        data.put("total_transactions", "3");
-        data.put("debit_type", "D");
-        data.put("ISPRE", Boolean.TRUE);
-        data.put("destination_amount_prepare", "15420.75");
-        data.put("destination_currency", "EUR");
-        data.put("destination_bank_swift_code", "DEMOESMMXXX");
-        data.put("user", "usuario.final");
-        data.put("prepare_user_fullname", "Preparador Demo Completo");
-        data.put("reference", "REF-2026-0001");
-        data.put("frequency_day", "Lunes");
-        data.put("intermediary_bank_name", "Banco Intermediario Demo");
-        data.put("intermediary_bank_swift_code", "INTBICMMXXX");
-        data.put("charge", "OUR");
-        data.put("message_error", "");
-        data.put("execution_date", "2026-03-01 14:30:00");
-        data.put("frequency_value", "1");
-        data.put("numberPending", "1");
-
-        data.put("beneficiaryBank", "Banco Beneficiario Demo");
-        data.put("beneficiaryAccount", "987654321000");
-        data.put("transactionDescription", "Transferencia internacional de prueba");
-        data.put("statusDescription", "Sin novedad");
-        data.put("beneficiaryName", "Proveedor Demo LLC");
-        data.put("transactionAmount", "EUR 15,420.75");
-        data.put("beneficiaryBankCode", "BICDESTXXX");
-
-        ArrayList<Map<String, Object>> aprobadores = buildApproversAsMaps();
-        data.put("APROBADORES", aprobadores);
-        data.put("levelone", aprobadores);
-        data.put("leveltwo", aprobadores);
-
-        for (int i = 1; i <= 8; i++) {
-            data.put("table_" + i + "_rows", aprobadores);
+        private ParsedArgs(
+                String jrxmlArg,
+                String jsonArg,
+                boolean compareWithJasper,
+                String className,
+                String outputPdfName) {
+            this.jrxmlArg = jrxmlArg;
+            this.jsonArg = jsonArg;
+            this.compareWithJasper = compareWithJasper;
+            this.className = className;
+            this.outputPdfName = outputPdfName;
         }
 
-        return data;
-    }
-
-    private static Map<String, Object> buildPaymentReportData() {
-        Map<String, Object> data = buildRobustData();
-
-        ArrayList<Approver> approverBeans = new ArrayList<>();
-        approverBeans.add(new Approver("Aprobador Nivel 0", "Aprobada", "2026-02-20 09:35", "0"));
-        approverBeans.add(new Approver("Aprobador Nivel 1", "Aprobada", "2026-02-20 09:40", "1"));
-        approverBeans.add(new Approver("Aprobador Nivel 2", "Aprobada", "2026-02-20 09:45", "2"));
-        approverBeans.add(new Approver("Aprobador Nivel 3", "Aprobada", "2026-02-20 09:50", "3"));
-
-        data.put("APROBADORES", approverBeans);
-        data.put("levelone", new JRBeanCollectionDataSource(approverBeans));
-        data.put("leveltwo", new JRBeanCollectionDataSource(approverBeans));
-        return data;
-    }
-
-    private static ArrayList<Map<String, Object>> buildApproversAsMaps() {
-        ArrayList<Map<String, Object>> aprobadores = new ArrayList<>();
-        aprobadores.add(approverMap("Aprobador Nivel 0", "Aprobada", "2026-02-20 09:35", "0"));
-        aprobadores.add(approverMap("Aprobador Nivel 1", "Aprobada", "2026-02-20 09:40", "1"));
-        aprobadores.add(approverMap("Aprobador Nivel 2", "Aprobada", "2026-02-20 09:45", "2"));
-        aprobadores.add(approverMap("Aprobador Nivel 3", "Aprobada", "2026-02-20 09:50", "3"));
-        return aprobadores;
-    }
-
-    private static Map<String, Object> approverMap(
-            String name, String status, String fecha, String level) {
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("name", name);
-        item.put("status", status);
-        item.put("fecha", fecha);
-        item.put("level", level);
-        return item;
-    }
-
-    private static Map<String, Object> row(String item, Double amount) {
-        Map<String, Object> row = new LinkedHashMap<>();
-        row.put("ITEM", item);
-        row.put("AMOUNT", amount);
-        return row;
-    }
-
-    private enum RunMode {
-        DEFAULT,
-        ROBUST,
-        PAYMENT_COMPARE;
-
-        private static RunMode fromArgs(String[] args) {
-            if (args.length == 0) {
-                return DEFAULT;
+        private static ParsedArgs parse(String[] args) {
+            int index = 0;
+            String first = args[0].trim();
+            if ("run".equalsIgnoreCase(first) || "render".equalsIgnoreCase(first)) {
+                index = 1;
+            } else if (!first.toLowerCase(Locale.ROOT).endsWith(".jrxml")) {
+                throw new IllegalArgumentException(
+                        "Comando no reconocido. Usa 'run <jrxml> <json>' o '<jrxml> <json>'.");
             }
-            String flag = args[0].trim().toLowerCase(Locale.ROOT);
-            if ("robust".equals(flag)) {
-                return ROBUST;
+
+            if (args.length < index + 2) {
+                throw new IllegalArgumentException(
+                        "Debes indicar <archivo.jrxml> y <archivo.json>.");
             }
-            if ("payment-compare".equals(flag) || "payment".equals(flag)) {
-                return PAYMENT_COMPARE;
+
+            String jrxmlArg = args[index];
+            String jsonArg = args[index + 1];
+            boolean compare = false;
+            String className = null;
+            String outputName = null;
+
+            for (int i = index + 2; i < args.length; i++) {
+                String arg = args[i];
+                if ("--compare".equalsIgnoreCase(arg)) {
+                    compare = true;
+                    continue;
+                }
+                if ("--class".equalsIgnoreCase(arg)) {
+                    if (i + 1 >= args.length) {
+                        throw new IllegalArgumentException("Falta valor para --class");
+                    }
+                    className = args[++i];
+                    continue;
+                }
+                if ("--out".equalsIgnoreCase(arg)) {
+                    if (i + 1 >= args.length) {
+                        throw new IllegalArgumentException("Falta valor para --out");
+                    }
+                    outputName = args[++i];
+                    continue;
+                }
+                throw new IllegalArgumentException("Argumento no soportado: " + arg);
             }
-            return DEFAULT;
+
+            return new ParsedArgs(jrxmlArg, jsonArg, compare, className, outputName);
         }
     }
 
@@ -762,35 +614,4 @@ public class Main {
             this.equivalent = equivalent;
         }
     }
-
-    public static final class Approver {
-        private final String name;
-        private final String status;
-        private final String fecha;
-        private final String level;
-
-        public Approver(String name, String status, String fecha, String level) {
-            this.name = name;
-            this.status = status;
-            this.fecha = fecha;
-            this.level = level;
-        }
-
-        public String getName() {
-            return name;
-        }
-
-        public String getStatus() {
-            return status;
-        }
-
-        public String getFecha() {
-            return fecha;
-        }
-
-        public String getLevel() {
-            return level;
-        }
-    }
-
 }

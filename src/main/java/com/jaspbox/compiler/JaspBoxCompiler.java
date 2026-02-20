@@ -86,6 +86,7 @@ import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.apache.pdfbox.pdmodel.font.PDFont;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
 import org.apache.pdfbox.pdmodel.graphics.image.PDImageXObject;
 
 public class JaspBoxCompiler {
@@ -880,7 +881,8 @@ public class JaspBoxCompiler {
 
         Color foreColor = defaultColor(context.styleResolver.getForecolor(textElement), Color.BLACK);
         methodBuilder.addStatement(
-                "contentStream.setNonStrokingColor($L, $L, $L)",
+                "contentStream.setNonStrokingColor(new $T($L, $L, $L))",
+                Color.class,
                 foreColor.getRed(),
                 foreColor.getGreen(),
                 foreColor.getBlue());
@@ -911,7 +913,7 @@ public class JaspBoxCompiler {
         methodBuilder.addStatement("contentStream.endText()");
         methodBuilder.endControlFlow();
         methodBuilder.addStatement("contentStream.restoreGraphicsState()");
-        methodBuilder.addStatement("contentStream.setNonStrokingColor(0, 0, 0)");
+        methodBuilder.addStatement("contentStream.setNonStrokingColor($T.BLACK)", Color.class);
     }
 
     private void emitImage(
@@ -1034,13 +1036,14 @@ public class JaspBoxCompiler {
                     defaultColor(context.styleResolver.getLineColor(graphicElement.getLinePen(), Color.BLACK), Color.BLACK);
             methodBuilder.addStatement("contentStream.setLineWidth($Lf)", lineWidth);
             methodBuilder.addStatement(
-                    "contentStream.setStrokingColor($L, $L, $L)",
+                    "contentStream.setStrokingColor(new $T($L, $L, $L))",
+                    Color.class,
                     lineColor.getRed(),
                     lineColor.getGreen(),
                     lineColor.getBlue());
             methodBuilder.addStatement("contentStream.addRect($L, $L, $Lf, $Lf)", xExpr, yPdfVar, width, height);
             methodBuilder.addStatement("contentStream.stroke()");
-            methodBuilder.addStatement("contentStream.setStrokingColor(0, 0, 0)");
+            methodBuilder.addStatement("contentStream.setStrokingColor($T.BLACK)", Color.class);
             methodBuilder.addStatement("contentStream.setLineWidth(1f)");
         }
     }
@@ -1067,7 +1070,8 @@ public class JaspBoxCompiler {
                 defaultColor(context.styleResolver.getLineColor(graphicElement.getLinePen(), Color.BLACK), Color.BLACK);
         methodBuilder.addStatement("contentStream.setLineWidth($Lf)", lineWidth);
         methodBuilder.addStatement(
-                "contentStream.setStrokingColor($L, $L, $L)",
+                "contentStream.setStrokingColor(new $T($L, $L, $L))",
+                Color.class,
                 lineColor.getRed(),
                 lineColor.getGreen(),
                 lineColor.getBlue());
@@ -1083,7 +1087,7 @@ public class JaspBoxCompiler {
         }
 
         methodBuilder.addStatement("contentStream.stroke()");
-        methodBuilder.addStatement("contentStream.setStrokingColor(0, 0, 0)");
+        methodBuilder.addStatement("contentStream.setStrokingColor($T.BLACK)", Color.class);
         methodBuilder.addStatement("contentStream.setLineWidth(1f)");
     }
 
@@ -1261,7 +1265,8 @@ public class JaspBoxCompiler {
                 && style.getBackcolor() != null) {
             Color back = style.getBackcolor();
             methodBuilder.addStatement(
-                    "contentStream.setNonStrokingColor($L, $L, $L)",
+                    "contentStream.setNonStrokingColor(new $T($L, $L, $L))",
+                    Color.class,
                     back.getRed(),
                     back.getGreen(),
                     back.getBlue());
@@ -1272,7 +1277,7 @@ public class JaspBoxCompiler {
                     (float) cellWidth,
                     (float) effectiveHeight);
             methodBuilder.addStatement("contentStream.fill()");
-            methodBuilder.addStatement("contentStream.setNonStrokingColor(0, 0, 0)");
+            methodBuilder.addStatement("contentStream.setNonStrokingColor($T.BLACK)", Color.class);
         }
 
         emitLineBoxBorders(
@@ -1301,13 +1306,14 @@ public class JaspBoxCompiler {
         Color backColor = context.styleResolver.getBackcolor(element);
         if (mode == ModeEnum.OPAQUE && backColor != null) {
             methodBuilder.addStatement(
-                    "contentStream.setNonStrokingColor($L, $L, $L)",
+                    "contentStream.setNonStrokingColor(new $T($L, $L, $L))",
+                    Color.class,
                     backColor.getRed(),
                     backColor.getGreen(),
                     backColor.getBlue());
             methodBuilder.addStatement("contentStream.addRect($L, $L, $Lf, $Lf)", xExpr, yPdfVar, width, height);
             methodBuilder.addStatement("contentStream.fill()");
-            methodBuilder.addStatement("contentStream.setNonStrokingColor(0, 0, 0)");
+            methodBuilder.addStatement("contentStream.setNonStrokingColor($T.BLACK)", Color.class);
         }
     }
 
@@ -1387,7 +1393,7 @@ public class JaspBoxCompiler {
                     yTopExpr);
         }
 
-        methodBuilder.addStatement("contentStream.setStrokingColor(0, 0, 0)");
+        methodBuilder.addStatement("contentStream.setStrokingColor($T.BLACK)", Color.class);
         methodBuilder.addStatement("contentStream.setLineWidth(1f)");
     }
 
@@ -1401,7 +1407,8 @@ public class JaspBoxCompiler {
             String y2Expr) {
         methodBuilder.addStatement("contentStream.setLineWidth($Lf)", lineWidth);
         methodBuilder.addStatement(
-                "contentStream.setStrokingColor($L, $L, $L)",
+                "contentStream.setStrokingColor(new $T($L, $L, $L))",
+                Color.class,
                 color.getRed(),
                 color.getGreen(),
                 color.getBlue());
@@ -1765,7 +1772,10 @@ public class JaspBoxCompiler {
                         .addParameter(String.class, "fontName")
                         .addParameter(boolean.class, "bold")
                         .addParameter(boolean.class, "italic");
-        methodBuilder.addStatement("return $T.HELVETICA", PDType1Font.class);
+        methodBuilder.addStatement(
+                "return new $T($T.FontName.HELVETICA)",
+                PDType1Font.class,
+                Standard14Fonts.class);
 
         return methodBuilder.build();
     }

@@ -43,6 +43,7 @@ import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
 import net.sf.jasperreports.engine.design.JasperDesign;
 import net.sf.jasperreports.engine.xml.JRXmlLoader;
+import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
@@ -76,15 +77,19 @@ public final class Main {
             return EXIT_SUCCESS;
         }
 
+        ParsedArgs parsed;
         try {
-            Path projectRoot = Paths.get("").toAbsolutePath();
-            ParsedArgs parsed = ParsedArgs.parse(args);
-            executeRun(projectRoot, parsed);
-            return EXIT_SUCCESS;
+            parsed = ParsedArgs.parse(args);
         } catch (IllegalArgumentException usageError) {
             System.err.println("Error de uso: " + usageError.getMessage());
             printUsage(System.err);
             return EXIT_INVALID_USAGE;
+        }
+
+        try {
+            Path projectRoot = Paths.get("").toAbsolutePath();
+            executeRun(projectRoot, parsed);
+            return EXIT_SUCCESS;
         } catch (Exception runtimeError) {
             System.err.println("Error ejecutando convertidor: " + runtimeError.getMessage());
             runtimeError.printStackTrace(System.err);
@@ -322,8 +327,8 @@ public final class Main {
     private static PdfComparisonResult comparePdfs(Path jasperPdf, Path generatedPdf) throws IOException {
         boolean bytesEqual = filesAreByteEqual(jasperPdf, generatedPdf);
 
-        try (PDDocument jasperDoc = PDDocument.load(jasperPdf.toFile());
-                PDDocument generatedDoc = PDDocument.load(generatedPdf.toFile())) {
+        try (PDDocument jasperDoc = Loader.loadPDF(jasperPdf.toFile());
+                PDDocument generatedDoc = Loader.loadPDF(generatedPdf.toFile())) {
             int jasperPages = jasperDoc.getNumberOfPages();
             int generatedPages = generatedDoc.getNumberOfPages();
             boolean pagesEqual = jasperPages == generatedPages;

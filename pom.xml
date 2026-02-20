@@ -16,7 +16,7 @@
         <maven.compiler.target>11</maven.compiler.target>
         <jasperreports.version>6.21.3</jasperreports.version>
         <javapoet.version>1.13.0</javapoet.version>
-        <pdfbox.version>2.0.30</pdfbox.version>
+        <pdfbox.version>3.0.3</pdfbox.version>
         <junit.version>5.10.2</junit.version>
     </properties>
 

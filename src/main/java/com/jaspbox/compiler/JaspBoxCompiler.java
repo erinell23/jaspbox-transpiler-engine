@@ -170,7 +170,8 @@ public class JaspBoxCompiler {
         generatedClass.addMethod(buildExtractReferenceKeyMethod());
         generatedClass.addMethod(buildUnquoteMethod());
         generatedClass.addMethod(buildEvalPrintWhenMethod());
-        generatedClass.addMethod(buildBuildMethod(context));
+        generatedClass.addMethod(buildBuildBytesMethod(context));
+        generatedClass.addMethod(buildBuildMethod());
 
         JavaFile javaFile = JavaFile.builder(packageName, generatedClass.build())
                 .skipJavaLangImports(true)
@@ -187,15 +188,15 @@ public class JaspBoxCompiler {
         return targetFile;
     }
 
-    private MethodSpec buildBuildMethod(GenerationContext context) {
+    private MethodSpec buildBuildBytesMethod(GenerationContext context) {
         ParameterizedTypeName mapType =
                 ParameterizedTypeName.get(Map.class, String.class, Object.class);
 
         MethodSpec.Builder methodBuilder =
-                MethodSpec.methodBuilder("build")
+                MethodSpec.methodBuilder("buildBytes")
                         .addModifiers(Modifier.PUBLIC)
                         .addParameter(mapType, "data")
-                        .addParameter(String.class, "outputPath")
+                        .returns(byte[].class)
                         .addException(IOException.class);
 
         methodBuilder.beginControlFlow("if (data == null)")
@@ -231,10 +232,37 @@ public class JaspBoxCompiler {
         emitReportContent(context, methodBuilder);
 
         methodBuilder.endControlFlow();
-        methodBuilder.addStatement("document.save(outputPath)");
+        methodBuilder.addStatement("$T out = new $T()", java.io.ByteArrayOutputStream.class, java.io.ByteArrayOutputStream.class);
+        methodBuilder.addStatement("document.save(out)");
+        methodBuilder.addStatement("return out.toByteArray()");
         methodBuilder.nextControlFlow("finally");
         methodBuilder.addStatement("document.close()");
         methodBuilder.endControlFlow();
+
+        return methodBuilder.build();
+    }
+
+    private MethodSpec buildBuildMethod() {
+        ParameterizedTypeName mapType =
+                ParameterizedTypeName.get(Map.class, String.class, Object.class);
+
+        MethodSpec.Builder methodBuilder =
+                MethodSpec.methodBuilder("build")
+                        .addModifiers(Modifier.PUBLIC)
+                        .addParameter(mapType, "data")
+                        .addParameter(String.class, "outputPath")
+                        .addException(IOException.class);
+
+        methodBuilder.beginControlFlow("if (outputPath == null || outputPath.isBlank())")
+                .addStatement("throw new IllegalArgumentException($S)", "outputPath no puede ser null o vacío")
+                .endControlFlow();
+        methodBuilder.addStatement("byte[] pdfBytes = buildBytes(data)");
+        methodBuilder.addStatement("$T output = $T.get(outputPath)", java.nio.file.Path.class, java.nio.file.Paths.class);
+        methodBuilder.addStatement("$T parent = output.getParent()", java.nio.file.Path.class);
+        methodBuilder.beginControlFlow("if (parent != null)");
+        methodBuilder.addStatement("$T.createDirectories(parent)", java.nio.file.Files.class);
+        methodBuilder.endControlFlow();
+        methodBuilder.addStatement("$T.write(output, pdfBytes)", java.nio.file.Files.class);
 
         return methodBuilder.build();
     }

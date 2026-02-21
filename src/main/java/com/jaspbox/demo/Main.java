@@ -279,6 +279,11 @@ public final class Main {
     }
 
     private static List<Map<String, ?>> buildMainRowsForJasper(JasperDesign design, Map<String, Object> data) {
+        List<Map<String, ?>> detailRows = extractDetailRows(data);
+        if (!detailRows.isEmpty()) {
+            return detailRows;
+        }
+
         Map<String, Object> row = new LinkedHashMap<>();
         for (JRField field : design.getFields()) {
             String fieldName = field.getName();
@@ -289,6 +294,37 @@ public final class Main {
             row.put(fieldName, value);
         }
         return Collections.singletonList(row);
+    }
+
+    private static List<Map<String, ?>> extractDetailRows(Map<String, Object> data) {
+        Object rowsObj = data.get("DETAIL_ROWS");
+        if (rowsObj == null) {
+            return Collections.emptyList();
+        }
+        if (!(rowsObj instanceof List<?>)) {
+            throw new IllegalArgumentException("DETAIL_ROWS debe ser una lista de objetos");
+        }
+
+        List<?> rawList = (List<?>) rowsObj;
+        List<Map<String, ?>> normalized = new ArrayList<>(rawList.size());
+        for (int i = 0; i < rawList.size(); i++) {
+            Object entry = rawList.get(i);
+            if (entry == null) {
+                normalized.add(Collections.emptyMap());
+                continue;
+            }
+            if (!(entry instanceof Map<?, ?>)) {
+                throw new IllegalArgumentException(
+                        "DETAIL_ROWS[" + i + "] debe ser un objeto JSON (mapa)");
+            }
+            Map<?, ?> rawMap = (Map<?, ?>) entry;
+            Map<String, Object> row = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> mapEntry : rawMap.entrySet()) {
+                row.put(String.valueOf(mapEntry.getKey()), mapEntry.getValue());
+            }
+            normalized.add(row);
+        }
+        return normalized;
     }
 
     private static void ensureAllParametersPresent(Path jrxmlPath, Map<String, Object> data)

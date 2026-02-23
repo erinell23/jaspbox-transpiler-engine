@@ -103,6 +103,7 @@ public final class Main {
 
         validateInputFile(jrxmlPath, "JRXML");
         validateInputFile(jsonPath, "JSON");
+        Path dataSourceJsonPath = resolveDataSourcePath(projectRoot, jsonPath, parsed.dataSourceJsonArg);
 
         String templateBaseName = stripExtension(jrxmlPath.getFileName().toString());
         String resolvedClassName =
@@ -115,14 +116,24 @@ public final class Main {
                         : parsed.outputPdfName;
 
         Map<String, Object> data = loadDataFromJson(jsonPath);
+        List<Map<String, Object>> dataSourceRows = loadDataSourceRows(dataSourceJsonPath);
         ensureAllParametersPresent(jrxmlPath, data);
 
         TranspileResult generatedResult =
-                runTranspiledReport(projectRoot, jrxmlPath, resolvedClassName, resolvedOutputPdf, data);
+                runTranspiledReport(
+                        projectRoot,
+                        jrxmlPath,
+                        resolvedClassName,
+                        resolvedOutputPdf,
+                        data,
+                        dataSourceRows);
 
         System.out.println("Template generado en: " + generatedResult.generatedJava);
         System.out.println("Template compilado en: " + generatedResult.generatedClasses);
         System.out.println("PDF clase generada en: " + generatedResult.outputPdf);
+        if (dataSourceJsonPath != null) {
+            System.out.println("DataSource JSON: " + dataSourceJsonPath);
+        }
 
         if (!parsed.compareWithJasper) {
             return;
@@ -133,7 +144,7 @@ public final class Main {
         Files.createDirectories(jasperPdfPath.getParent());
 
         try {
-            generatePdfWithJasper(jrxmlPath, data, jasperPdfPath);
+            generatePdfWithJasper(jrxmlPath, data, dataSourceRows, jasperPdfPath);
             PdfComparisonResult comparisonResult = comparePdfs(jasperPdfPath, generatedResult.outputPdf);
             System.out.println("PDF Jasper generado en: " + jasperPdfPath);
             System.out.println("Comparación:");
@@ -166,15 +177,19 @@ public final class Main {
 
     private static void printUsage(java.io.PrintStream out) {
         out.println("Uso:");
-        out.println("  run <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]");
+        out.println(
+                "  run <archivo.jrxml> <archivo.json> [--datasource archivo-datasource.json] [--compare] [--class NombreClase] [--out salida.pdf]");
         out.println();
         out.println("También soporta forma corta:");
-        out.println("  <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]");
+        out.println(
+                "  <archivo.jrxml> <archivo.json> [--datasource archivo-datasource.json] [--compare] [--class NombreClase] [--out salida.pdf]");
         out.println();
         out.println("Ejemplos:");
         out.println("  run local-input/payment-report.jrxml local-input/payment-report.json");
         out.println(
                 "  run local-input/payment-report.jrxml local-input/payment-report.json --compare --class PaymentTemplate --out payment.pdf");
+        out.println(
+                "  run local-input/payment-report.jrxml local-input/payment-report.json --datasource local-input/payment-report-datasource.json");
     }
 
     private static Path resolveInputPath(Path projectRoot, String input) {
@@ -238,12 +253,83 @@ public final class Main {
         return new LinkedHashMap<>(parsed);
     }
 
+    private static Path resolveDataSourcePath(
+            Path projectRoot, Path jsonPath, String explicitDataSourceArg) {
+        if (explicitDataSourceArg != null && !explicitDataSourceArg.isBlank()) {
+            Path explicitPath = resolveInputPath(projectRoot, explicitDataSourceArg);
+            validateInputFile(explicitPath, "JSON datasource");
+            return explicitPath;
+        }
+        String baseName = stripExtension(jsonPath.getFileName().toString());
+        Path parent = jsonPath.getParent() == null ? projectRoot : jsonPath.getParent();
+        Path inferred = parent.resolve(baseName + "-datasource.json").normalize();
+        if (Files.exists(inferred) && Files.isRegularFile(inferred)) {
+            return inferred;
+        }
+        return null;
+    }
+
+    private static List<Map<String, Object>> loadDataSourceRows(Path dataSourceJsonPath)
+            throws IOException {
+        if (dataSourceJsonPath == null) {
+            return Collections.emptyList();
+        }
+
+        Object parsed = OBJECT_MAPPER.readValue(dataSourceJsonPath.toFile(), Object.class);
+        if (parsed == null) {
+            return Collections.emptyList();
+        }
+        if (parsed instanceof List<?>) {
+            return normalizeRowsList((List<?>) parsed, "dataSource");
+        }
+        if (parsed instanceof Map<?, ?>) {
+            Map<?, ?> map = (Map<?, ?>) parsed;
+            Object rowsObj = map.get("rows");
+            if (rowsObj == null) {
+                rowsObj = map.get("dataSource");
+            }
+            if (rowsObj == null) {
+                throw new IllegalArgumentException(
+                        "El JSON datasource debe ser una lista o contener 'rows' o 'dataSource'.");
+            }
+            if (!(rowsObj instanceof List<?>)) {
+                throw new IllegalArgumentException(
+                        "El valor de 'rows/dataSource' en datasource debe ser una lista.");
+            }
+            return normalizeRowsList((List<?>) rowsObj, "dataSource");
+        }
+        throw new IllegalArgumentException("Formato de datasource no soportado: " + parsed.getClass().getName());
+    }
+
+    private static List<Map<String, Object>> normalizeRowsList(List<?> rawRows, String key) {
+        List<Map<String, Object>> rows = new ArrayList<>(rawRows.size());
+        for (int i = 0; i < rawRows.size(); i++) {
+            Object row = rawRows.get(i);
+            if (row == null) {
+                rows.add(new LinkedHashMap<>());
+                continue;
+            }
+            if (!(row instanceof Map<?, ?>)) {
+                throw new IllegalArgumentException(
+                        key + "[" + i + "] debe ser un objeto JSON (mapa)");
+            }
+            Map<?, ?> rawMap = (Map<?, ?>) row;
+            Map<String, Object> normalized = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
+                normalized.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+            rows.add(normalized);
+        }
+        return rows;
+    }
+
     private static TranspileResult runTranspiledReport(
             Path projectRoot,
             Path jrxmlPath,
             String className,
             String outputPdfName,
-            Map<String, Object> data)
+            Map<String, Object> data,
+            List<Map<String, Object>> dataSourceRows)
             throws Exception {
         Path generatedSources = projectRoot.resolve("target/generated-sources/jaspbox");
         Path generatedClasses = projectRoot.resolve("target/generated-classes/jaspbox");
@@ -257,12 +343,17 @@ public final class Main {
         Path generatedJava =
                 compiler.transpile(jrxmlPath, generatedSources, "com.jaspbox.generated", className);
         compileGeneratedSource(generatedJava, generatedClasses);
-        invokeTemplateBuild(generatedClasses, "com.jaspbox.generated." + className, data, outputPdf);
+        invokeTemplateBuild(
+                generatedClasses, "com.jaspbox.generated." + className, data, dataSourceRows, outputPdf);
 
         return new TranspileResult(generatedJava, generatedClasses, outputPdf);
     }
 
-    private static void generatePdfWithJasper(Path jrxmlPath, Map<String, Object> data, Path outputPdfPath)
+    private static void generatePdfWithJasper(
+            Path jrxmlPath,
+            Map<String, Object> data,
+            List<Map<String, Object>> dataSourceRows,
+            Path outputPdfPath)
             throws JRException, IOException {
         JasperDesign design;
         try (var inputStream = Files.newInputStream(jrxmlPath)) {
@@ -271,17 +362,19 @@ public final class Main {
         JasperReport report = JasperCompileManager.compileReport(design);
 
         Map<String, Object> parameters = new HashMap<>(data);
-        List<Map<String, ?>> mainRows = buildMainRowsForJasper(design, data);
+        List<Map<String, ?>> mainRows = buildMainRowsForJasper(design, data, dataSourceRows);
         JRMapCollectionDataSource dataSource = new JRMapCollectionDataSource(mainRows);
 
         JasperPrint print = JasperFillManager.fillReport(report, parameters, dataSource);
         JasperExportManager.exportReportToPdfFile(print, outputPdfPath.toString());
     }
 
-    private static List<Map<String, ?>> buildMainRowsForJasper(JasperDesign design, Map<String, Object> data) {
-        List<Map<String, ?>> detailRows = extractDetailRows(data);
-        if (!detailRows.isEmpty()) {
-            return detailRows;
+    private static List<Map<String, ?>> buildMainRowsForJasper(
+            JasperDesign design,
+            Map<String, Object> data,
+            List<Map<String, Object>> dataSourceRows) {
+        if (dataSourceRows != null && !dataSourceRows.isEmpty()) {
+            return new ArrayList<>(dataSourceRows);
         }
 
         Map<String, Object> row = new LinkedHashMap<>();
@@ -294,37 +387,6 @@ public final class Main {
             row.put(fieldName, value);
         }
         return Collections.singletonList(row);
-    }
-
-    private static List<Map<String, ?>> extractDetailRows(Map<String, Object> data) {
-        Object rowsObj = data.get("DETAIL_ROWS");
-        if (rowsObj == null) {
-            return Collections.emptyList();
-        }
-        if (!(rowsObj instanceof List<?>)) {
-            throw new IllegalArgumentException("DETAIL_ROWS debe ser una lista de objetos");
-        }
-
-        List<?> rawList = (List<?>) rowsObj;
-        List<Map<String, ?>> normalized = new ArrayList<>(rawList.size());
-        for (int i = 0; i < rawList.size(); i++) {
-            Object entry = rawList.get(i);
-            if (entry == null) {
-                normalized.add(Collections.emptyMap());
-                continue;
-            }
-            if (!(entry instanceof Map<?, ?>)) {
-                throw new IllegalArgumentException(
-                        "DETAIL_ROWS[" + i + "] debe ser un objeto JSON (mapa)");
-            }
-            Map<?, ?> rawMap = (Map<?, ?>) entry;
-            Map<String, Object> row = new LinkedHashMap<>();
-            for (Map.Entry<?, ?> mapEntry : rawMap.entrySet()) {
-                row.put(String.valueOf(mapEntry.getKey()), mapEntry.getValue());
-            }
-            normalized.add(row);
-        }
-        return normalized;
     }
 
     private static void ensureAllParametersPresent(Path jrxmlPath, Map<String, Object> data)
@@ -536,28 +598,42 @@ public final class Main {
     }
 
     private static void invokeTemplateBuild(
-            Path generatedClasses, String templateClassName, Map<String, Object> data, Path outputPdf)
+            Path generatedClasses,
+            String templateClassName,
+            Map<String, Object> data,
+            List<Map<String, Object>> dataSourceRows,
+            Path outputPdf)
             throws Exception {
         URL[] urls = {generatedClasses.toUri().toURL()};
         try (URLClassLoader classLoader = new URLClassLoader(urls, Main.class.getClassLoader())) {
             Class<?> templateClass = Class.forName(templateClassName, true, classLoader);
             Object template = templateClass.getDeclaredConstructor().newInstance();
-            Method buildMethod = templateClass.getMethod("build", Map.class, String.class);
             try {
-                buildMethod.invoke(template, data, outputPdf.toString());
-            } catch (InvocationTargetException invocationTargetException) {
-                Throwable cause = invocationTargetException.getCause();
-                if (cause instanceof Exception) {
-                    throw (Exception) cause;
-                }
-                throw invocationTargetException;
+                Method buildMethod = templateClass.getMethod("build", Map.class, List.class, String.class);
+                invokeBuildMethod(template, buildMethod, data, dataSourceRows, outputPdf.toString());
+            } catch (NoSuchMethodException ignored) {
+                Method buildMethod = templateClass.getMethod("build", Map.class, String.class);
+                invokeBuildMethod(template, buildMethod, data, outputPdf.toString());
             }
+        }
+    }
+
+    private static void invokeBuildMethod(Object template, Method method, Object... args) throws Exception {
+        try {
+            method.invoke(template, args);
+        } catch (InvocationTargetException invocationTargetException) {
+            Throwable cause = invocationTargetException.getCause();
+            if (cause instanceof Exception) {
+                throw (Exception) cause;
+            }
+            throw invocationTargetException;
         }
     }
 
     private static final class ParsedArgs {
         private final String jrxmlArg;
         private final String jsonArg;
+        private final String dataSourceJsonArg;
         private final boolean compareWithJasper;
         private final String className;
         private final String outputPdfName;
@@ -565,11 +641,13 @@ public final class Main {
         private ParsedArgs(
                 String jrxmlArg,
                 String jsonArg,
+                String dataSourceJsonArg,
                 boolean compareWithJasper,
                 String className,
                 String outputPdfName) {
             this.jrxmlArg = jrxmlArg;
             this.jsonArg = jsonArg;
+            this.dataSourceJsonArg = dataSourceJsonArg;
             this.compareWithJasper = compareWithJasper;
             this.className = className;
             this.outputPdfName = outputPdfName;
@@ -595,6 +673,7 @@ public final class Main {
             boolean compare = false;
             String className = null;
             String outputName = null;
+            String dataSourceJson = null;
 
             for (int i = index + 2; i < args.length; i++) {
                 String arg = args[i];
@@ -616,10 +695,19 @@ public final class Main {
                     outputName = args[++i];
                     continue;
                 }
+                if ("--datasource".equalsIgnoreCase(arg)
+                        || "--data-source".equalsIgnoreCase(arg)) {
+                    if (i + 1 >= args.length) {
+                        throw new IllegalArgumentException("Falta valor para --datasource");
+                    }
+                    dataSourceJson = args[++i];
+                    continue;
+                }
                 throw new IllegalArgumentException("Argumento no soportado: " + arg);
             }
 
-            return new ParsedArgs(jrxmlArg, jsonArg, compare, className, outputName);
+            return new ParsedArgs(
+                    jrxmlArg, jsonArg, dataSourceJson, compare, className, outputName);
         }
     }
 

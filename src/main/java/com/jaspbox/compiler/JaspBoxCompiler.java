@@ -171,8 +171,10 @@ public class JaspBoxCompiler {
         generatedClass.addMethod(buildExtractReferenceKeyMethod());
         generatedClass.addMethod(buildUnquoteMethod());
         generatedClass.addMethod(buildEvalPrintWhenMethod());
-        generatedClass.addMethod(buildBuildBytesMethod(context));
+        generatedClass.addMethod(buildBuildBytesMethod());
+        generatedClass.addMethod(buildBuildBytesWithDataSourceMethod(context));
         generatedClass.addMethod(buildBuildMethod());
+        generatedClass.addMethod(buildBuildWithDataSourceMethod());
 
         JavaFile javaFile = JavaFile.builder(packageName, generatedClass.build())
                 .skipJavaLangImports(true)
@@ -189,14 +191,30 @@ public class JaspBoxCompiler {
         return targetFile;
     }
 
-    private MethodSpec buildBuildBytesMethod(GenerationContext context) {
+    private MethodSpec buildBuildBytesMethod() {
         ParameterizedTypeName mapType =
                 ParameterizedTypeName.get(Map.class, String.class, Object.class);
+
+        return MethodSpec.methodBuilder("buildBytes")
+                .addModifiers(Modifier.PUBLIC)
+                .addParameter(mapType, "data")
+                .returns(byte[].class)
+                .addException(IOException.class)
+                .addStatement("return buildBytes(data, null)")
+                .build();
+    }
+
+    private MethodSpec buildBuildBytesWithDataSourceMethod(GenerationContext context) {
+        ParameterizedTypeName mapType =
+                ParameterizedTypeName.get(Map.class, String.class, Object.class);
+        ParameterizedTypeName listOfMapType =
+                ParameterizedTypeName.get(ClassName.get(List.class), mapType);
 
         MethodSpec.Builder methodBuilder =
                 MethodSpec.methodBuilder("buildBytes")
                         .addModifiers(Modifier.PUBLIC)
                         .addParameter(mapType, "data")
+                        .addParameter(listOfMapType, "dataSource")
                         .returns(byte[].class)
                         .addException(IOException.class);
 
@@ -212,6 +230,20 @@ public class JaspBoxCompiler {
                     variableEntry.getKey(),
                     variableEntry.getValue());
         }
+
+        String detailRowsVar = context.nextVar("detailRows");
+        methodBuilder.addStatement(
+                "$T<$T<$T, Object>> $L",
+                List.class,
+                Map.class,
+                String.class,
+                detailRowsVar);
+        methodBuilder.beginControlFlow("if (dataSource != null && !dataSource.isEmpty())");
+        methodBuilder.addStatement("$L = dataSource", detailRowsVar);
+        methodBuilder.nextControlFlow("else");
+        methodBuilder.addStatement("$L = new $T<>()", detailRowsVar, ArrayList.class);
+        methodBuilder.addStatement("$L.add(data)", detailRowsVar);
+        methodBuilder.endControlFlow();
 
         methodBuilder.addStatement("$T document = new $T()", PDDocument.class, PDDocument.class);
         methodBuilder.beginControlFlow("try");
@@ -230,7 +262,7 @@ public class JaspBoxCompiler {
                 PDPageContentStream.class);
         methodBuilder.addStatement("final float pageHeight = page.getMediaBox().getHeight()");
 
-        emitReportContent(context, methodBuilder);
+        emitReportContent(context, methodBuilder, detailRowsVar);
 
         methodBuilder.endControlFlow();
         methodBuilder.addStatement("$T out = new $T()", java.io.ByteArrayOutputStream.class, java.io.ByteArrayOutputStream.class);
@@ -257,7 +289,29 @@ public class JaspBoxCompiler {
         methodBuilder.beginControlFlow("if (outputPath == null || outputPath.isBlank())")
                 .addStatement("throw new IllegalArgumentException($S)", "outputPath no puede ser null o vacío")
                 .endControlFlow();
-        methodBuilder.addStatement("byte[] pdfBytes = buildBytes(data)");
+        methodBuilder.addStatement("build(data, null, outputPath)");
+
+        return methodBuilder.build();
+    }
+
+    private MethodSpec buildBuildWithDataSourceMethod() {
+        ParameterizedTypeName mapType =
+                ParameterizedTypeName.get(Map.class, String.class, Object.class);
+        ParameterizedTypeName listOfMapType =
+                ParameterizedTypeName.get(ClassName.get(List.class), mapType);
+
+        MethodSpec.Builder methodBuilder =
+                MethodSpec.methodBuilder("build")
+                        .addModifiers(Modifier.PUBLIC)
+                        .addParameter(mapType, "data")
+                        .addParameter(listOfMapType, "dataSource")
+                        .addParameter(String.class, "outputPath")
+                        .addException(IOException.class);
+
+        methodBuilder.beginControlFlow("if (outputPath == null || outputPath.isBlank())")
+                .addStatement("throw new IllegalArgumentException($S)", "outputPath no puede ser null o vacío")
+                .endControlFlow();
+        methodBuilder.addStatement("byte[] pdfBytes = buildBytes(data, dataSource)");
         methodBuilder.addStatement("$T output = $T.get(outputPath)", java.nio.file.Path.class, java.nio.file.Paths.class);
         methodBuilder.addStatement("$T parent = output.getParent()", java.nio.file.Path.class);
         methodBuilder.beginControlFlow("if (parent != null)");
@@ -268,7 +322,8 @@ public class JaspBoxCompiler {
         return methodBuilder.build();
     }
 
-    private void emitReportContent(GenerationContext context, MethodSpec.Builder methodBuilder) {
+    private void emitReportContent(
+            GenerationContext context, MethodSpec.Builder methodBuilder, String detailRowsVar) {
         float leftMargin = context.design.getLeftMargin();
         String cursorYVar = context.nextVar("cursorY");
         methodBuilder.addStatement("float $L = $Lf", cursorYVar, (float) context.design.getTopMargin());
@@ -316,23 +371,8 @@ public class JaspBoxCompiler {
 
         JRSection detailSection = context.design.getDetailSection();
         if (detailSection != null && detailSection.getBands() != null) {
-            String detailRowsObjVar = context.nextVar("detailRowsObj");
-            String detailRowsVar = context.nextVar("detailRows");
             String detailRowVar = context.nextVar("detailRow");
             String detailIndexVar = context.nextVar("detailIndex");
-            methodBuilder.addStatement("Object $L = data.get($S)", detailRowsObjVar, "DETAIL_ROWS");
-            methodBuilder.addStatement(
-                    "$T<$T<$T, Object>> $L = asRowList($L, $S)",
-                    List.class,
-                    Map.class,
-                    String.class,
-                    detailRowsVar,
-                    detailRowsObjVar,
-                    "DETAIL_ROWS");
-            methodBuilder.beginControlFlow("if ($L.isEmpty())", detailRowsVar);
-            methodBuilder.addStatement("$L = new $T<>()", detailRowsVar, ArrayList.class);
-            methodBuilder.addStatement("$L.add(data)", detailRowsVar);
-            methodBuilder.endControlFlow();
             methodBuilder.addStatement("int $L = 0", detailIndexVar);
             methodBuilder.beginControlFlow("for ($T<$T, Object> $L : $L)", Map.class, String.class, detailRowVar, detailRowsVar);
             methodBuilder.addStatement("data.put($S, Integer.valueOf(++$L))", "REPORT_COUNT", detailIndexVar);

@@ -7,7 +7,7 @@ Herramienta CLI en Java 11+ que convierte plantillas JasperReports (`.jrxml`) a 
 1. Lee un `JRXML`.
 2. Genera una clase Java transpileada en `target/generated-sources/jaspbox`.
 3. Compila esa clase en `target/generated-classes/jaspbox`.
-4. Ejecuta el método `build(Map<String,Object>, String)` de la clase generada para producir el PDF.
+4. Ejecuta la clase generada para producir el PDF (`build(...)` o `buildBytes(...)`).
 
 Opcionalmente puede comparar el resultado contra Jasper (`--compare`).
 
@@ -40,14 +40,14 @@ java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar --help
 
 ```bash
 java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
-  run <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]
+  run <archivo.jrxml> <archivo.json> [--datasource archivo-datasource.json] [--compare] [--class NombreClase] [--out salida.pdf]
 ```
 
 También soporta forma corta:
 
 ```bash
 java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
-  <archivo.jrxml> <archivo.json> [--compare] [--class NombreClase] [--out salida.pdf]
+  <archivo.jrxml> <archivo.json> [--datasource archivo-datasource.json] [--compare] [--class NombreClase] [--out salida.pdf]
 ```
 
 ### Ejemplos
@@ -62,6 +62,15 @@ java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
   run local-input/payment-report.jrxml local-input/payment-report.json \
   --class PaymentReportTemplate --out payment-generated.pdf --compare
 ```
+
+```bash
+java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
+  run local-input/payment-report.jrxml local-input/payment-report.json \
+  --datasource local-input/payment-report-datasource.json
+```
+
+Si no indicas `--datasource`, el CLI intenta autodetectar:
+- `<archivo-json>-datasource.json` en la misma carpeta.
 
 ## Uso con Maven (sin jar)
 
@@ -78,7 +87,11 @@ mvn -q compile exec:java -Dexec.args="run local-input/payment-report.jrxml local
 
 ## Formato JSON esperado
 
-El JSON debe ser un objeto raíz (`Map<String,Object>`) con claves que coincidan con los parámetros/campos usados por el JRXML.
+El JSON principal debe ser un objeto raíz (`Map<String,Object>`) con claves que coincidan con los parámetros del JRXML.
+
+Para el datasource principal (`detail`), puedes usar:
+- `--datasource archivo.json` (recomendado), o
+- autodetección de `<archivo-json>-datasource.json` en la misma carpeta.
 
 Ejemplo:
 
@@ -106,7 +119,16 @@ Ya está ignorado en `.gitignore`:
 - Maven
 - JasperReports (parse/validación del JRXML)
 - JavaPoet (generación de fuente Java)
-- Apache PDFBox 2.0.x (render del PDF final)
+- Apache PDFBox (render del PDF final)
+
+## API de la clase generada
+
+La clase transpileada expone estas variantes:
+
+- `build(Map<String,Object> data, String outputPath)`
+- `build(Map<String,Object> data, List<Map<String,Object>> dataSource, String outputPath)`
+- `buildBytes(Map<String,Object> data)`
+- `buildBytes(Map<String,Object> data, List<Map<String,Object>> dataSource)`
 
 ## Tests
 

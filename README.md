@@ -10,6 +10,7 @@ Herramienta CLI en Java 11+ que convierte plantillas JasperReports (`.jrxml`) a 
 4. Ejecuta la clase generada para producir el PDF (`build(...)` o `buildBytes(...)`).
 
 Opcionalmente puede comparar el resultado contra Jasper (`--compare`).
+También permite ejecutar una clase generada/editada manualmente sin volver a transpilar (`run-class`).
 
 ## Requisitos
 
@@ -43,6 +44,13 @@ java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
   run <archivo.jrxml> <archivo.json> [--datasource archivo-datasource.json] [--compare] [--class NombreClase] [--out salida.pdf]
 ```
 
+### Ejecutar solo clase generada (sin retranspilar)
+
+```bash
+java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
+  run-class <template.java> <archivo.json> [--datasource archivo-datasource.json] [--class FQCN|NombreClase] [--out salida.pdf]
+```
+
 También soporta forma corta:
 
 ```bash
@@ -69,6 +77,14 @@ java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
   --datasource local-input/payment-report-datasource.json
 ```
 
+```bash
+java -jar target/jaspbox-transpiler-engine-1.0.0-SNAPSHOT-all.jar \
+  run-class target/generated-sources/jaspbox/com/jaspbox/generated/PaymentTemplate.java \
+  local-input/payment-report.json \
+  --datasource local-input/payment-report-datasource.json \
+  --out payment-manual.pdf
+```
+
 Si no indicas `--datasource`, el CLI intenta autodetectar:
 - `<archivo-json>-datasource.json` en la misma carpeta.
 
@@ -78,10 +94,15 @@ Si no indicas `--datasource`, el CLI intenta autodetectar:
 mvn -q compile exec:java -Dexec.args="run local-input/payment-report.jrxml local-input/payment-report.json"
 ```
 
+```bash
+mvn -q compile exec:java -Dexec.args="run-class target/generated-sources/jaspbox/com/jaspbox/generated/PaymentTemplate.java local-input/payment-report.json --datasource local-input/payment-report-datasource.json --out payment-manual.pdf"
+```
+
 ## Salidas
 
 - Clase Java generada: `target/generated-sources/jaspbox/com/jaspbox/generated/*.java`
 - Clase compilada: `target/generated-classes/jaspbox`
+- Clase compilada manual (`run-class`): `target/generated-classes/jaspbox-manual`
 - PDF generado: `target/output/*.pdf`
 - PDF Jasper (si `--compare`): `target/output/*-jasper.pdf`
 
@@ -129,6 +150,26 @@ La clase transpileada expone estas variantes:
 - `build(Map<String,Object> data, List<Map<String,Object>> dataSource, String outputPath)`
 - `buildBytes(Map<String,Object> data)`
 - `buildBytes(Map<String,Object> data, List<Map<String,Object>> dataSource)`
+
+## Paginación multipágina estilo Jasper
+
+Cuando el `detail` supera el espacio disponible:
+
+- se crea nueva página automáticamente,
+- se repiten encabezados configurables (`pageHeader`, `columnHeader`, `background`),
+- se procesan footers de salida de página (`columnFooter`, `pageFooter`) y `lastPageFooter` en la última página.
+
+Puedes controlar el comportamiento por `JRXML` con propiedades opcionales:
+
+```xml
+<property name="jaspbox.repeatBackgroundOnNewPage" value="true"/>
+<property name="jaspbox.repeatPageHeaderOnNewPage" value="true"/>
+<property name="jaspbox.repeatColumnHeaderOnNewPage" value="true"/>
+<property name="jaspbox.repeatColumnFooterOnNewPage" value="true"/>
+<property name="jaspbox.repeatPageFooterOnNewPage" value="true"/>
+```
+
+Si no defines estas propiedades, el valor por defecto es `true`.
 
 ## Tests
 

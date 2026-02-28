@@ -57,6 +57,11 @@ public final class Main {
     private static final int EXIT_RUNTIME_ERROR = 1;
     private static final int EXIT_INVALID_USAGE = 2;
 
+    private enum RunMode {
+        TRANPILE_AND_RUN,
+        RUN_GENERATED_CLASS_ONLY
+    }
+
     private Main() {}
 
     public static void main(String[] args) {
@@ -98,6 +103,11 @@ public final class Main {
     }
 
     private static void executeRun(Path projectRoot, ParsedArgs parsed) throws Exception {
+        if (parsed.mode == RunMode.RUN_GENERATED_CLASS_ONLY) {
+            executeRunGeneratedClassOnly(projectRoot, parsed);
+            return;
+        }
+
         Path jrxmlPath = resolveInputPath(projectRoot, parsed.jrxmlArg);
         Path jsonPath = resolveInputPath(projectRoot, parsed.jsonArg);
 
@@ -164,6 +174,41 @@ public final class Main {
         }
     }
 
+    private static void executeRunGeneratedClassOnly(Path projectRoot, ParsedArgs parsed)
+            throws Exception {
+        Path generatedJavaPath = resolveInputPath(projectRoot, parsed.generatedJavaArg);
+        Path jsonPath = resolveInputPath(projectRoot, parsed.jsonArg);
+
+        validateInputFile(generatedJavaPath, "Clase Java generada");
+        validateInputFile(jsonPath, "JSON");
+        Path dataSourceJsonPath = resolveDataSourcePath(projectRoot, jsonPath, parsed.dataSourceJsonArg);
+
+        Map<String, Object> data = loadDataFromJson(jsonPath);
+        List<Map<String, Object>> dataSourceRows = loadDataSourceRows(dataSourceJsonPath);
+
+        String templateBaseName = stripExtension(generatedJavaPath.getFileName().toString());
+        String resolvedOutputPdf =
+                parsed.outputPdfName == null || parsed.outputPdfName.isBlank()
+                        ? templateBaseName + "-manual-generated.pdf"
+                        : parsed.outputPdfName;
+
+        Path generatedClasses = projectRoot.resolve("target/generated-classes/jaspbox-manual");
+        Path outputPdf = projectRoot.resolve("target/output/" + resolvedOutputPdf);
+        Files.createDirectories(generatedClasses);
+        Files.createDirectories(outputPdf.getParent());
+
+        compileGeneratedSource(generatedJavaPath, generatedClasses);
+        String templateClassName = resolveTemplateClassName(generatedJavaPath, parsed.className);
+        invokeTemplateBuild(generatedClasses, templateClassName, data, dataSourceRows, outputPdf);
+
+        System.out.println("Clase manual compilada en: " + generatedClasses);
+        System.out.println("FQCN ejecutado: " + templateClassName);
+        System.out.println("PDF clase generada en: " + outputPdf);
+        if (dataSourceJsonPath != null) {
+            System.out.println("DataSource JSON: " + dataSourceJsonPath);
+        }
+    }
+
     private static boolean isHelpArg(String arg) {
         if (arg == null) {
             return false;
@@ -179,6 +224,8 @@ public final class Main {
         out.println("Uso:");
         out.println(
                 "  run <archivo.jrxml> <archivo.json> [--datasource archivo-datasource.json] [--compare] [--class NombreClase] [--out salida.pdf]");
+        out.println(
+                "  run-class <template.java> <archivo.json> [--datasource archivo-datasource.json] [--class FQCN|NombreClase] [--out salida.pdf]");
         out.println();
         out.println("También soporta forma corta:");
         out.println(
@@ -190,6 +237,8 @@ public final class Main {
                 "  run local-input/payment-report.jrxml local-input/payment-report.json --compare --class PaymentTemplate --out payment.pdf");
         out.println(
                 "  run local-input/payment-report.jrxml local-input/payment-report.json --datasource local-input/payment-report-datasource.json");
+        out.println(
+                "  run-class target/generated-sources/jaspbox/com/jaspbox/generated/PaymentTemplate.java local-input/payment-report.json --datasource local-input/payment-report-datasource.json --out payment-manual.pdf");
     }
 
     private static Path resolveInputPath(Path projectRoot, String input) {
@@ -597,6 +646,30 @@ public final class Main {
                 + diagnostic.getMessage(Locale.ROOT);
     }
 
+    private static String resolveTemplateClassName(Path javaFile, String classArg) throws IOException {
+        String packageName = "";
+        for (String line : Files.readAllLines(javaFile, StandardCharsets.UTF_8)) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("package ") && trimmed.endsWith(";")) {
+                packageName = trimmed.substring("package ".length(), trimmed.length() - 1).trim();
+                break;
+            }
+            if (trimmed.startsWith("public class ") || trimmed.startsWith("class ")) {
+                break;
+            }
+        }
+
+        String fileClassName = stripExtension(javaFile.getFileName().toString());
+        if (classArg != null && !classArg.isBlank()) {
+            String explicit = classArg.trim();
+            if (explicit.contains(".")) {
+                return explicit;
+            }
+            return packageName.isBlank() ? explicit : packageName + "." + explicit;
+        }
+        return packageName.isBlank() ? fileClassName : packageName + "." + fileClassName;
+    }
+
     private static void invokeTemplateBuild(
             Path generatedClasses,
             String templateClassName,
@@ -631,7 +704,9 @@ public final class Main {
     }
 
     private static final class ParsedArgs {
+        private final RunMode mode;
         private final String jrxmlArg;
+        private final String generatedJavaArg;
         private final String jsonArg;
         private final String dataSourceJsonArg;
         private final boolean compareWithJasper;
@@ -639,13 +714,17 @@ public final class Main {
         private final String outputPdfName;
 
         private ParsedArgs(
+                RunMode mode,
                 String jrxmlArg,
+                String generatedJavaArg,
                 String jsonArg,
                 String dataSourceJsonArg,
                 boolean compareWithJasper,
                 String className,
                 String outputPdfName) {
+            this.mode = mode;
             this.jrxmlArg = jrxmlArg;
+            this.generatedJavaArg = generatedJavaArg;
             this.jsonArg = jsonArg;
             this.dataSourceJsonArg = dataSourceJsonArg;
             this.compareWithJasper = compareWithJasper;
@@ -656,19 +735,31 @@ public final class Main {
         private static ParsedArgs parse(String[] args) {
             int index = 0;
             String first = args[0].trim();
-            if ("run".equalsIgnoreCase(first) || "render".equalsIgnoreCase(first)) {
+            RunMode mode;
+            if ("run-class".equalsIgnoreCase(first)) {
+                mode = RunMode.RUN_GENERATED_CLASS_ONLY;
                 index = 1;
+            } else if ("run".equalsIgnoreCase(first) || "render".equalsIgnoreCase(first)) {
+                mode = RunMode.TRANPILE_AND_RUN;
+                index = 1;
+            } else if (first.toLowerCase(Locale.ROOT).endsWith(".java")) {
+                mode = RunMode.RUN_GENERATED_CLASS_ONLY;
             } else if (!first.toLowerCase(Locale.ROOT).endsWith(".jrxml")) {
                 throw new IllegalArgumentException(
-                        "Comando no reconocido. Usa 'run <jrxml> <json>' o '<jrxml> <json>'.");
+                        "Comando no reconocido. Usa 'run <jrxml> <json>', '<jrxml> <json>' o 'run-class <template.java> <json>'.");
+            } else {
+                mode = RunMode.TRANPILE_AND_RUN;
             }
 
             if (args.length < index + 2) {
-                throw new IllegalArgumentException(
-                        "Debes indicar <archivo.jrxml> y <archivo.json>.");
+                if (mode == RunMode.RUN_GENERATED_CLASS_ONLY) {
+                    throw new IllegalArgumentException(
+                            "Debes indicar <template.java> y <archivo.json>.");
+                }
+                throw new IllegalArgumentException("Debes indicar <archivo.jrxml> y <archivo.json>.");
             }
 
-            String jrxmlArg = args[index];
+            String firstArg = args[index];
             String jsonArg = args[index + 1];
             boolean compare = false;
             String className = null;
@@ -678,6 +769,10 @@ public final class Main {
             for (int i = index + 2; i < args.length; i++) {
                 String arg = args[i];
                 if ("--compare".equalsIgnoreCase(arg)) {
+                    if (mode == RunMode.RUN_GENERATED_CLASS_ONLY) {
+                        throw new IllegalArgumentException(
+                                "--compare solo aplica en modo 'run' con JRXML.");
+                    }
                     compare = true;
                     continue;
                 }
@@ -707,7 +802,14 @@ public final class Main {
             }
 
             return new ParsedArgs(
-                    jrxmlArg, jsonArg, dataSourceJson, compare, className, outputName);
+                    mode,
+                    mode == RunMode.TRANPILE_AND_RUN ? firstArg : null,
+                    mode == RunMode.RUN_GENERATED_CLASS_ONLY ? firstArg : null,
+                    jsonArg,
+                    dataSourceJson,
+                    compare,
+                    className,
+                    outputName);
         }
     }
 

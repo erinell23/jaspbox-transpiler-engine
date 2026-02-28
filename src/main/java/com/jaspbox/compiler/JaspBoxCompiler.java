@@ -115,6 +115,16 @@ public class JaspBoxCompiler {
         Map<String, String> variableExpressions = collectVariableExpressions(design);
         Map<String, String> importAliases = collectImportAliases(design);
         Map<String, Base64Constant> base64Constants = collectBase64ParameterConstants(design);
+        boolean repeatPageHeaderOnNewPage =
+                resolveBooleanDesignProperty(design, "jaspbox.repeatPageHeaderOnNewPage", true);
+        boolean repeatColumnHeaderOnNewPage =
+                resolveBooleanDesignProperty(design, "jaspbox.repeatColumnHeaderOnNewPage", true);
+        boolean repeatBackgroundOnNewPage =
+                resolveBooleanDesignProperty(design, "jaspbox.repeatBackgroundOnNewPage", true);
+        boolean repeatPageFooterOnNewPage =
+                resolveBooleanDesignProperty(design, "jaspbox.repeatPageFooterOnNewPage", true);
+        boolean repeatColumnFooterOnNewPage =
+                resolveBooleanDesignProperty(design, "jaspbox.repeatColumnFooterOnNewPage", true);
 
         GenerationContext context =
                 new GenerationContext(
@@ -124,7 +134,12 @@ public class JaspBoxCompiler {
                         variableTypes,
                         variableExpressions,
                         importAliases,
-                        base64Constants);
+                        base64Constants,
+                        repeatPageHeaderOnNewPage,
+                        repeatColumnHeaderOnNewPage,
+                        repeatBackgroundOnNewPage,
+                        repeatPageFooterOnNewPage,
+                        repeatColumnFooterOnNewPage);
 
         TypeSpec.Builder generatedClass =
                 TypeSpec.classBuilder(className)
@@ -153,6 +168,8 @@ public class JaspBoxCompiler {
         generatedClass.addMethod(buildEvalAsObjectMethod());
         generatedClass.addMethod(buildEvalAsStringMethod());
         generatedClass.addMethod(buildEvalPrintWhenMethod());
+        generatedClass.addMethod(buildRenderRepeatedPageBandsMethod(context));
+        generatedClass.addMethod(buildRenderTrailingPageBandsMethod(context));
         generatedClass.addMethod(buildBuildBytesMethod());
         generatedClass.addMethod(buildBuildBytesWithDataSourceMethod(context));
         generatedClass.addMethod(buildBuildMethod());
@@ -228,6 +245,7 @@ public class JaspBoxCompiler {
         methodBuilder.endControlFlow();
 
         methodBuilder.addStatement("$T document = new $T()", PDDocument.class, PDDocument.class);
+        methodBuilder.addStatement("$T contentStream = null", PDPageContentStream.class);
         methodBuilder.beginControlFlow("try");
         methodBuilder.addStatement(
                 "$T page = new $T(new $T($Lf, $Lf))",
@@ -237,20 +255,22 @@ public class JaspBoxCompiler {
                 (float) context.design.getPageWidth(),
                 (float) context.design.getPageHeight());
         methodBuilder.addStatement("document.addPage(page)");
-
-        methodBuilder.beginControlFlow(
-                "try ($T contentStream = new $T(document, page))",
-                PDPageContentStream.class,
-                PDPageContentStream.class);
-        methodBuilder.addStatement("final float pageHeight = page.getMediaBox().getHeight()");
+        methodBuilder.addStatement("contentStream = new $T(document, page)", PDPageContentStream.class);
+        methodBuilder.addStatement("float pageHeight = page.getMediaBox().getHeight()");
 
         emitReportContent(context, methodBuilder, detailRowsVar);
 
+        methodBuilder.beginControlFlow("if (contentStream != null)");
+        methodBuilder.addStatement("contentStream.close()");
+        methodBuilder.addStatement("contentStream = null");
         methodBuilder.endControlFlow();
         methodBuilder.addStatement("$T out = new $T()", java.io.ByteArrayOutputStream.class, java.io.ByteArrayOutputStream.class);
         methodBuilder.addStatement("document.save(out)");
         methodBuilder.addStatement("return out.toByteArray()");
         methodBuilder.nextControlFlow("finally");
+        methodBuilder.beginControlFlow("if (contentStream != null)");
+        methodBuilder.addStatement("contentStream.close()");
+        methodBuilder.endControlFlow();
         methodBuilder.addStatement("document.close()");
         methodBuilder.endControlFlow();
 
@@ -307,13 +327,22 @@ public class JaspBoxCompiler {
     private void emitReportContent(
             GenerationContext context, MethodSpec.Builder methodBuilder, String detailRowsVar) {
         float leftMargin = context.design.getLeftMargin();
+        float topMargin = context.design.getTopMargin();
+        float bottomMargin = context.design.getBottomMargin();
+        float trailingReservedHeight =
+                resolveBandHeight(context.design.getColumnFooter())
+                        + Math.max(
+                                resolveBandHeight(context.design.getPageFooter()),
+                                resolveBandHeight(context.design.getLastPageFooter()));
         String cursorYVar = context.nextVar("cursorY");
-        methodBuilder.addStatement("float $L = $Lf", cursorYVar, (float) context.design.getTopMargin());
-
-        JRBand background = context.design.getBackground();
-        if (background != null) {
-            emitBand(context, methodBuilder, background, "0f", "0f", "data");
-        }
+        String maxCursorYVar = context.nextVar("maxCursorY");
+        methodBuilder.addStatement("float $L = $Lf", cursorYVar, topMargin);
+        methodBuilder.addStatement(
+                "float $L = Math.max(pageHeight - $Lf - $Lf, $Lf)",
+                maxCursorYVar,
+                bottomMargin,
+                trailingReservedHeight,
+                topMargin);
 
         if (context.design.getTitle() != null) {
             String consumedVar =
@@ -327,37 +356,60 @@ public class JaspBoxCompiler {
             methodBuilder.addStatement("$L += $L", cursorYVar, consumedVar);
         }
 
-        if (context.design.getPageHeader() != null) {
-            String consumedVar =
-                    emitBand(
-                    context,
-                    methodBuilder,
-                    context.design.getPageHeader(),
-                    floatLiteral(leftMargin),
-                    cursorYVar,
-                    "data");
-            methodBuilder.addStatement("$L += $L", cursorYVar, consumedVar);
-        }
-
-        if (context.design.getColumnHeader() != null) {
-            String consumedVar =
-                    emitBand(
-                    context,
-                    methodBuilder,
-                    context.design.getColumnHeader(),
-                    floatLiteral(leftMargin),
-                    cursorYVar,
-                    "data");
-            methodBuilder.addStatement("$L += $L", cursorYVar, consumedVar);
-        }
+        methodBuilder.addStatement(
+                "$L = renderRepeatedPageBands(document, contentStream, pageHeight, $L, data, false)",
+                cursorYVar,
+                cursorYVar);
 
         JRSection detailSection = context.design.getDetailSection();
         if (detailSection != null && detailSection.getBands() != null) {
             String detailRowVar = context.nextVar("detailRow");
             String detailIndexVar = context.nextVar("detailIndex");
+            float detailBandsEstimatedHeight = 0f;
+            for (JRBand detailBand : detailSection.getBands()) {
+                if (detailBand != null) {
+                    detailBandsEstimatedHeight += detailBand.getHeight();
+                }
+            }
             methodBuilder.addStatement("int $L = 0", detailIndexVar);
             methodBuilder.beginControlFlow("for ($T<$T, Object> $L : $L)", Map.class, String.class, detailRowVar, detailRowsVar);
             methodBuilder.addStatement("data.put($S, Integer.valueOf(++$L))", "REPORT_COUNT", detailIndexVar);
+            if (detailBandsEstimatedHeight > 0f) {
+                String currentPageVar = context.nextVar("currentPage");
+                methodBuilder.beginControlFlow(
+                        "if ($L + $Lf > $L)",
+                        cursorYVar,
+                        detailBandsEstimatedHeight,
+                        maxCursorYVar);
+                methodBuilder.addStatement(
+                        "$L = renderTrailingPageBands(document, contentStream, pageHeight, $L, data, false)",
+                        cursorYVar,
+                        cursorYVar);
+                methodBuilder.addStatement("contentStream.close()");
+                methodBuilder.addStatement(
+                        "int $L = ((Number) readTypedValue(data, $S, $S)).intValue()",
+                        currentPageVar,
+                        "PAGE_NUMBER",
+                        "java.lang.Integer");
+                methodBuilder.addStatement("data.put($S, Integer.valueOf($L + 1))", "PAGE_NUMBER", currentPageVar);
+                methodBuilder.addStatement(
+                        "page = new $T(new $T($Lf, $Lf))",
+                        PDPage.class,
+                        PDRectangle.class,
+                        (float) context.design.getPageWidth(),
+                        (float) context.design.getPageHeight());
+                methodBuilder.addStatement("document.addPage(page)");
+                methodBuilder.addStatement(
+                        "contentStream = new $T(document, page)",
+                        PDPageContentStream.class);
+                methodBuilder.addStatement("pageHeight = page.getMediaBox().getHeight()");
+                methodBuilder.addStatement("$L = pageHeight - $Lf", maxCursorYVar, bottomMargin);
+                methodBuilder.addStatement(
+                        "$L = renderRepeatedPageBands(document, contentStream, pageHeight, $Lf, data, true)",
+                        cursorYVar,
+                        topMargin);
+                methodBuilder.endControlFlow();
+            }
             for (JRBand detailBand : detailSection.getBands()) {
                 String consumedVar =
                         emitBand(
@@ -370,42 +422,6 @@ public class JaspBoxCompiler {
                 methodBuilder.addStatement("$L += $L", cursorYVar, consumedVar);
             }
             methodBuilder.endControlFlow();
-        }
-
-        if (context.design.getColumnFooter() != null) {
-            String consumedVar =
-                    emitBand(
-                    context,
-                    methodBuilder,
-                    context.design.getColumnFooter(),
-                    floatLiteral(leftMargin),
-                    cursorYVar,
-                    "data");
-            methodBuilder.addStatement("$L += $L", cursorYVar, consumedVar);
-        }
-
-        if (context.design.getPageFooter() != null) {
-            String consumedVar =
-                    emitBand(
-                    context,
-                    methodBuilder,
-                    context.design.getPageFooter(),
-                    floatLiteral(leftMargin),
-                    cursorYVar,
-                    "data");
-            methodBuilder.addStatement("$L += $L", cursorYVar, consumedVar);
-        }
-
-        if (context.design.getLastPageFooter() != null) {
-            String consumedVar =
-                    emitBand(
-                    context,
-                    methodBuilder,
-                    context.design.getLastPageFooter(),
-                    floatLiteral(leftMargin),
-                    cursorYVar,
-                    "data");
-            methodBuilder.addStatement("$L += $L", cursorYVar, consumedVar);
         }
 
         if (context.design.getSummary() != null) {
@@ -429,6 +445,11 @@ public class JaspBoxCompiler {
                     cursorYVar,
                     "data");
         }
+
+        methodBuilder.addStatement(
+                "$L = renderTrailingPageBands(document, contentStream, pageHeight, $L, data, true)",
+                cursorYVar,
+                cursorYVar);
     }
 
     private String emitBand(
@@ -2107,6 +2128,141 @@ public class JaspBoxCompiler {
         return methodBuilder.build();
     }
 
+    private MethodSpec buildRenderRepeatedPageBandsMethod(GenerationContext context) {
+        ParameterizedTypeName mapType =
+                ParameterizedTypeName.get(Map.class, String.class, Object.class);
+        MethodSpec.Builder methodBuilder =
+                MethodSpec.methodBuilder("renderRepeatedPageBands")
+                        .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+                        .returns(float.class)
+                        .addException(IOException.class)
+                        .addParameter(PDDocument.class, "document")
+                        .addParameter(PDPageContentStream.class, "contentStream")
+                        .addParameter(float.class, "pageHeight")
+                        .addParameter(float.class, "startY")
+                        .addParameter(mapType, "data")
+                        .addParameter(boolean.class, "overflowPage");
+
+        methodBuilder.addStatement("float cursorY = startY");
+        float leftMargin = context.design.getLeftMargin();
+
+        JRBand background = context.design.getBackground();
+        if (background != null) {
+            methodBuilder.beginControlFlow(
+                    "if (!overflowPage || $L)", context.repeatBackgroundOnNewPage);
+            emitBand(context, methodBuilder, background, "0f", "0f", "data");
+            methodBuilder.endControlFlow();
+        }
+
+        if (context.design.getPageHeader() != null) {
+            methodBuilder.beginControlFlow(
+                    "if (!overflowPage || $L)", context.repeatPageHeaderOnNewPage);
+            String consumedVar =
+                    emitBand(
+                            context,
+                            methodBuilder,
+                            context.design.getPageHeader(),
+                            floatLiteral(leftMargin),
+                            "cursorY",
+                            "data");
+            methodBuilder.addStatement("cursorY += $L", consumedVar);
+            methodBuilder.endControlFlow();
+        }
+
+        if (context.design.getColumnHeader() != null) {
+            methodBuilder.beginControlFlow(
+                    "if (!overflowPage || $L)", context.repeatColumnHeaderOnNewPage);
+            String consumedVar =
+                    emitBand(
+                            context,
+                            methodBuilder,
+                            context.design.getColumnHeader(),
+                            floatLiteral(leftMargin),
+                            "cursorY",
+                            "data");
+            methodBuilder.addStatement("cursorY += $L", consumedVar);
+            methodBuilder.endControlFlow();
+        }
+
+        methodBuilder.addStatement("return cursorY");
+        return methodBuilder.build();
+    }
+
+    private MethodSpec buildRenderTrailingPageBandsMethod(GenerationContext context) {
+        ParameterizedTypeName mapType =
+                ParameterizedTypeName.get(Map.class, String.class, Object.class);
+        MethodSpec.Builder methodBuilder =
+                MethodSpec.methodBuilder("renderTrailingPageBands")
+                        .addModifiers(Modifier.PRIVATE, Modifier.STATIC)
+                        .returns(float.class)
+                        .addException(IOException.class)
+                        .addParameter(PDDocument.class, "document")
+                        .addParameter(PDPageContentStream.class, "contentStream")
+                        .addParameter(float.class, "pageHeight")
+                        .addParameter(float.class, "startY")
+                        .addParameter(mapType, "data")
+                        .addParameter(boolean.class, "lastPage");
+
+        methodBuilder.addStatement("float cursorY = startY");
+        float leftMargin = context.design.getLeftMargin();
+
+        if (context.design.getColumnFooter() != null) {
+            methodBuilder.beginControlFlow(
+                    "if (lastPage || $L)", context.repeatColumnFooterOnNewPage);
+            String columnFooterConsumedVar =
+                    emitBand(
+                            context,
+                            methodBuilder,
+                            context.design.getColumnFooter(),
+                            floatLiteral(leftMargin),
+                            "cursorY",
+                            "data");
+            methodBuilder.addStatement("cursorY += $L", columnFooterConsumedVar);
+            methodBuilder.endControlFlow();
+        }
+
+        if (context.design.getLastPageFooter() != null) {
+            methodBuilder.beginControlFlow("if (lastPage)");
+            String lastPageFooterConsumedVar =
+                    emitBand(
+                            context,
+                            methodBuilder,
+                            context.design.getLastPageFooter(),
+                            floatLiteral(leftMargin),
+                            "cursorY",
+                            "data");
+            methodBuilder.addStatement("cursorY += $L", lastPageFooterConsumedVar);
+            methodBuilder.nextControlFlow("else if ($L)", context.repeatPageFooterOnNewPage);
+            if (context.design.getPageFooter() != null) {
+                String pageFooterConsumedVar =
+                        emitBand(
+                                context,
+                                methodBuilder,
+                                context.design.getPageFooter(),
+                                floatLiteral(leftMargin),
+                                "cursorY",
+                                "data");
+                methodBuilder.addStatement("cursorY += $L", pageFooterConsumedVar);
+            }
+            methodBuilder.endControlFlow();
+        } else if (context.design.getPageFooter() != null) {
+            methodBuilder.beginControlFlow("if (lastPage || $L)", context.repeatPageFooterOnNewPage);
+            String pageFooterConsumedVar =
+                    emitBand(
+                            context,
+                            methodBuilder,
+                            context.design.getPageFooter(),
+                            floatLiteral(leftMargin),
+                            "cursorY",
+                            "data");
+            methodBuilder.addStatement("cursorY += $L", pageFooterConsumedVar);
+            methodBuilder.endControlFlow();
+        }
+
+        methodBuilder.addStatement("return cursorY");
+        return methodBuilder.build();
+    }
+
     private Map<String, String> collectParameterTypes(JasperDesign design) {
         Map<String, String> parameterTypes = new LinkedHashMap<>();
         for (JRParameter parameter : design.getParametersList()) {
@@ -2286,6 +2442,31 @@ public class JaspBoxCompiler {
         return rawType.trim();
     }
 
+    private boolean resolveBooleanDesignProperty(
+            JasperDesign design, String propertyName, boolean defaultValue) {
+        if (design == null || propertyName == null || propertyName.isBlank()) {
+            return defaultValue;
+        }
+        String raw = null;
+        if (design.getPropertiesMap() != null) {
+            raw = design.getPropertiesMap().getProperty(propertyName);
+        }
+        if (raw == null) {
+            return defaultValue;
+        }
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return defaultValue;
+        }
+        if ("true".equals(normalized)) {
+            return true;
+        }
+        if ("false".equals(normalized)) {
+            return false;
+        }
+        return defaultValue;
+    }
+
     private String safeString(String value) {
         return value == null ? "" : value;
     }
@@ -2420,6 +2601,10 @@ public class JaspBoxCompiler {
         return value == null ? fallback : value;
     }
 
+    private static float resolveBandHeight(JRBand band) {
+        return band == null ? 0f : band.getHeight();
+    }
+
     private static Color defaultColor(Color color, Color fallback) {
         return color == null ? fallback : color;
     }
@@ -2467,6 +2652,11 @@ public class JaspBoxCompiler {
         private final Map<String, String> variableExpressions;
         private final Map<String, String> importAliases;
         private final Map<String, Base64Constant> base64Constants;
+        private final boolean repeatPageHeaderOnNewPage;
+        private final boolean repeatColumnHeaderOnNewPage;
+        private final boolean repeatBackgroundOnNewPage;
+        private final boolean repeatPageFooterOnNewPage;
+        private final boolean repeatColumnFooterOnNewPage;
         private final StyleResolver styleResolver;
         private int sequence;
         private int tableSequence;
@@ -2481,7 +2671,12 @@ public class JaspBoxCompiler {
                 Map<String, String> variableTypes,
                 Map<String, String> variableExpressions,
                 Map<String, String> importAliases,
-                Map<String, Base64Constant> base64Constants) {
+                Map<String, Base64Constant> base64Constants,
+                boolean repeatPageHeaderOnNewPage,
+                boolean repeatColumnHeaderOnNewPage,
+                boolean repeatBackgroundOnNewPage,
+                boolean repeatPageFooterOnNewPage,
+                boolean repeatColumnFooterOnNewPage) {
             this.design = design;
             this.parameterTypes = parameterTypes;
             this.fieldTypes = fieldTypes;
@@ -2489,6 +2684,11 @@ public class JaspBoxCompiler {
             this.variableExpressions = variableExpressions;
             this.importAliases = importAliases;
             this.base64Constants = base64Constants;
+            this.repeatPageHeaderOnNewPage = repeatPageHeaderOnNewPage;
+            this.repeatColumnHeaderOnNewPage = repeatColumnHeaderOnNewPage;
+            this.repeatBackgroundOnNewPage = repeatBackgroundOnNewPage;
+            this.repeatPageFooterOnNewPage = repeatPageFooterOnNewPage;
+            this.repeatColumnFooterOnNewPage = repeatColumnFooterOnNewPage;
             this.styleResolver = StyleResolver.getInstance();
         }
 

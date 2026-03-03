@@ -3,6 +3,7 @@ package com.jaspbox.demo;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jaspbox.compiler.JaspBoxCompiler;
+import com.jaspbox.compiler.JasperDesignLoader;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -42,7 +43,6 @@ import net.sf.jasperreports.engine.JasperReport;
 import net.sf.jasperreports.engine.data.JRBeanCollectionDataSource;
 import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
 import net.sf.jasperreports.engine.design.JasperDesign;
-import net.sf.jasperreports.engine.xml.JRXmlLoader;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
@@ -404,10 +404,7 @@ public final class Main {
             List<Map<String, Object>> dataSourceRows,
             Path outputPdfPath)
             throws JRException, IOException {
-        JasperDesign design;
-        try (var inputStream = Files.newInputStream(jrxmlPath)) {
-            design = JRXmlLoader.load(inputStream);
-        }
+        JasperDesign design = JasperDesignLoader.load(jrxmlPath);
         JasperReport report = JasperCompileManager.compileReport(design);
 
         Map<String, Object> parameters = new HashMap<>(data);
@@ -440,10 +437,7 @@ public final class Main {
 
     private static void ensureAllParametersPresent(Path jrxmlPath, Map<String, Object> data)
             throws IOException, JRException {
-        JasperDesign design;
-        try (var inputStream = Files.newInputStream(jrxmlPath)) {
-            design = JRXmlLoader.load(inputStream);
-        }
+        JasperDesign design = JasperDesignLoader.load(jrxmlPath);
 
         for (JRParameter parameter : design.getParameters()) {
             if (parameter.isSystemDefined() || data.containsKey(parameter.getName())) {

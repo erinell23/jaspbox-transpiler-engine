@@ -10,7 +10,6 @@ import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeSpec;
 import java.awt.Color;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Writer;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -79,7 +78,6 @@ import net.sf.jasperreports.engine.type.TextAdjustEnum;
 import net.sf.jasperreports.engine.type.VerticalImageAlignEnum;
 import net.sf.jasperreports.engine.type.VerticalTextAlignEnum;
 import net.sf.jasperreports.engine.util.StyleResolver;
-import net.sf.jasperreports.engine.xml.JRXmlLoader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -101,10 +99,8 @@ public class JaspBoxCompiler {
 
     public Path transpile(Path jrxmlPath, Path outputDir, String packageName, String className)
             throws IOException, JRException {
-        try (InputStream inputStream = Files.newInputStream(jrxmlPath)) {
-            JasperDesign design = JRXmlLoader.load(inputStream);
-            return transpile(design, outputDir, packageName, className);
-        }
+        JasperDesign design = JasperDesignLoader.load(jrxmlPath);
+        return transpile(design, outputDir, packageName, className);
     }
 
     public Path transpile(JasperDesign design, Path outputDir, String packageName, String className)
@@ -652,7 +648,7 @@ public class JaspBoxCompiler {
         methodBuilder.addStatement("float $L = $L", floatCursorVar, yBaseExpr);
 
         for (JRElement element : ordered) {
-            boolean isFloat = PositionTypeEnum.FLOAT.equals(element.getPositionTypeValue());
+            boolean isFloat = PositionTypeEnum.FLOAT.equals(element.getPositionType());
             if (!isFloat) {
                 emitElement(context, methodBuilder, element, xBaseExpr, yBaseExpr, dataRef);
                 continue;
@@ -863,7 +859,7 @@ public class JaspBoxCompiler {
         if (resolvedFontName.isBlank()) {
             resolvedFontName = "Helvetica";
         }
-        float fontSize = Math.max(1.0f, context.styleResolver.getFontsize(textElement));
+        float fontSize = Math.max(1.0f, context.styleResolver.getFontSize(textElement));
         boolean bold = context.styleResolver.isBold(textElement);
         boolean italic = context.styleResolver.isItalic(textElement);
         float leftPadding = safePadding(context.styleResolver.getLeftPadding(textElement.getLineBox()));
@@ -872,9 +868,8 @@ public class JaspBoxCompiler {
         float bottomPadding = safePadding(context.styleResolver.getBottomPadding(textElement.getLineBox()));
         boolean stretchHeight =
                 textElement instanceof JRTextField
-                        && (((JRTextField) textElement).isStretchWithOverflow()
-                                || TextAdjustEnum.STRETCH_HEIGHT.equals(
-                                        ((JRTextField) textElement).getTextAdjust()));
+                        && TextAdjustEnum.STRETCH_HEIGHT.equals(
+                                ((JRTextField) textElement).getTextAdjust());
 
         HorizontalTextAlignEnum horizontalTextAlign =
                 context.styleResolver.getHorizontalTextAlign(textElement);
@@ -1061,7 +1056,7 @@ public class JaspBoxCompiler {
             }
         }
         CodeBlock fallbackBase64Code = CodeBlock.of("$L", fallbackBase64Expr);
-        ScaleImageEnum scaleImageEnum = context.styleResolver.getScaleImageValue(image);
+        ScaleImageEnum scaleImageEnum = context.styleResolver.getScaleImage(image);
         String scaleImageName = scaleImageEnum == null ? "RETAIN_SHAPE" : scaleImageEnum.name();
         HorizontalImageAlignEnum horizontalImageAlign =
                 context.styleResolver.getHorizontalImageAlign(image);
@@ -1178,7 +1173,7 @@ public class JaspBoxCompiler {
                 lineColor.getBlue());
 
         String xEndExpr = plus(xExpr, width);
-        if (line.getDirectionValue() == LineDirectionEnum.BOTTOM_UP) {
+        if (line.getDirection() == LineDirectionEnum.BOTTOM_UP) {
             methodBuilder.addStatement("contentStream.moveTo($L, $L)", xExpr, yPdfVar);
             methodBuilder.addStatement(
                     "contentStream.lineTo($L, $L + $Lf)", xEndExpr, yPdfVar, height);
@@ -1362,7 +1357,7 @@ public class JaspBoxCompiler {
 
         JRStyle style = cell.getStyle();
         if (style != null
-                && style.getModeValue() == ModeEnum.OPAQUE
+                && style.getMode() == ModeEnum.OPAQUE
                 && style.getBackcolor() != null) {
             Color back = style.getBackcolor();
             methodBuilder.addStatement(

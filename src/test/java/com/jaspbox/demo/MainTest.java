@@ -7,6 +7,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import net.sf.jasperreports.engine.design.JRDesignBand;
+import net.sf.jasperreports.engine.design.JRDesignExpression;
+import net.sf.jasperreports.engine.design.JRDesignParameter;
+import net.sf.jasperreports.engine.design.JRDesignSection;
+import net.sf.jasperreports.engine.design.JRDesignTextField;
+import net.sf.jasperreports.engine.design.JasperDesign;
+import net.sf.jasperreports.engine.xml.JRXmlWriter;
 import org.junit.jupiter.api.Test;
 
 class MainTest {
@@ -26,27 +33,37 @@ class MainTest {
     @Test
     void shouldGeneratePdfFromJrxmlAndJson() throws Exception {
         Path jrxml = Files.createTempFile("jaspbox-main-test-", ".jrxml");
-        String jrxmlContent =
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                        + "<jasperReport xmlns=\"http://jasperreports.sourceforge.net/jasperreports\"\n"
-                        + " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n"
-                        + " xsi:schemaLocation=\"http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd\"\n"
-                        + " name=\"testMinimal\" pageWidth=\"595\" pageHeight=\"842\" columnWidth=\"555\"\n"
-                        + " leftMargin=\"20\" rightMargin=\"20\" topMargin=\"20\" bottomMargin=\"20\">\n"
-                        + "  <parameter name=\"TITLE\" class=\"java.lang.String\"/>\n"
-                        + "  <title>\n"
-                        + "    <band height=\"40\">\n"
-                        + "      <textField>\n"
-                        + "        <reportElement x=\"0\" y=\"0\" width=\"300\" height=\"20\"/>\n"
-                        + "        <textFieldExpression><![CDATA[$P{TITLE}]]></textFieldExpression>\n"
-                        + "      </textField>\n"
-                        + "    </band>\n"
-                        + "  </title>\n"
-                        + "  <detail>\n"
-                        + "    <band height=\"1\"/>\n"
-                        + "  </detail>\n"
-                        + "</jasperReport>\n";
-        Files.writeString(jrxml, jrxmlContent, StandardCharsets.UTF_8);
+        JasperDesign design = new JasperDesign();
+        design.setName("testMinimal");
+        design.setPageWidth(595);
+        design.setPageHeight(842);
+        design.setLeftMargin(20);
+        design.setRightMargin(20);
+        design.setTopMargin(20);
+        design.setBottomMargin(20);
+        design.setColumnWidth(555);
+
+        JRDesignParameter titleParam = new JRDesignParameter();
+        titleParam.setName("TITLE");
+        titleParam.setValueClass(String.class);
+        design.addParameter(titleParam);
+
+        JRDesignBand titleBand = new JRDesignBand();
+        titleBand.setHeight(40);
+        JRDesignTextField titleField = new JRDesignTextField();
+        titleField.setX(0);
+        titleField.setY(0);
+        titleField.setWidth(300);
+        titleField.setHeight(20);
+        titleField.setExpression(new JRDesignExpression("$P{TITLE}"));
+        titleBand.addElement(titleField);
+        design.setTitle(titleBand);
+
+        JRDesignBand detailBand = new JRDesignBand();
+        detailBand.setHeight(1);
+        ((JRDesignSection) design.getDetailSection()).addBand(detailBand);
+
+        JRXmlWriter.writeReport(design, jrxml.toString(), StandardCharsets.UTF_8.name());
 
         Path json = Files.createTempFile("jaspbox-main-test-", ".json");
         String jsonContent =

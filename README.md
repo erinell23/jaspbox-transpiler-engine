@@ -142,6 +142,14 @@ Ya está ignorado en `.gitignore`:
 - JavaPoet (generación de fuente Java)
 - Apache PDFBox (render del PDF final)
 
+### Compatibilidad JasperReports 7
+
+Esta rama usa JasperReports `7.x` para parseo/compilación del `JRXML`.
+
+- Si tu template fue creado en JasperReports/Jaspersoft Studio `6.x`, debes migrarlo a formato `7.x` antes de usar `run`.
+- Recomendado: abrir el `.jrxml` en Jaspersoft Studio 7 y guardarlo nuevamente.
+- Si intentas cargar un template legacy 6.x, el CLI mostrará un error explícito de migración.
+
 ## API de la clase generada
 
 La clase transpileada expone estas variantes:

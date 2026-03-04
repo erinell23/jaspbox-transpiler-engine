@@ -1084,12 +1084,28 @@ public class JaspBoxCompiler {
                         String expectedType =
                                 context.parameterTypes.getOrDefault(
                                         variableParameter, "java.lang.Object");
-                        fallbackBase64Expr =
-                                "asText(readTypedValue(data, \""
-                                        + variableParameter
-                                        + "\", \""
-                                        + expectedType
-                                        + "\"))";
+                        Base64Constant base64Constant = context.base64Constants.get(variableParameter);
+                        if (base64Constant != null) {
+                            fallbackBase64Expr =
+                                    "(sanitizeText(asText(readTypedValue(data, \""
+                                            + variableParameter
+                                            + "\", \""
+                                            + expectedType
+                                            + "\"))).trim().isEmpty() ? "
+                                            + base64Constant.constantName
+                                            + " : asText(readTypedValue(data, \""
+                                            + variableParameter
+                                            + "\", \""
+                                            + expectedType
+                                            + "\")))";
+                        } else {
+                            fallbackBase64Expr =
+                                    "asText(readTypedValue(data, \""
+                                            + variableParameter
+                                            + "\", \""
+                                            + expectedType
+                                            + "\"))";
+                        }
                     }
                 }
             }

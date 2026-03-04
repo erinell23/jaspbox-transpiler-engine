@@ -446,7 +446,23 @@ public final class Main {
         }
 
         for (JRParameter parameter : design.getParameters()) {
-            if (parameter.isSystemDefined() || data.containsKey(parameter.getName())) {
+            if (parameter.isSystemDefined()) {
+                continue;
+            }
+
+            Object currentValue = data.get(parameter.getName());
+            boolean hasValue = data.containsKey(parameter.getName()) && currentValue != null;
+            if (hasValue) {
+                continue;
+            }
+
+            Object defaultLiteral = parseDefaultValueLiteral(parameter);
+            if (defaultLiteral != null) {
+                data.put(parameter.getName(), defaultLiteral);
+                continue;
+            }
+
+            if (data.containsKey(parameter.getName())) {
                 continue;
             }
 
@@ -469,6 +485,88 @@ public final class Main {
             }
             data.put(parameter.getName(), fallback);
         }
+    }
+
+    private static Object parseDefaultValueLiteral(JRParameter parameter) {
+        if (parameter == null
+                || parameter.getDefaultValueExpression() == null
+                || parameter.getDefaultValueExpression().getText() == null) {
+            return null;
+        }
+        String expression = parameter.getDefaultValueExpression().getText().trim();
+        if (expression.isEmpty()) {
+            return null;
+        }
+
+        String quoted = tryExtractQuotedLiteral(expression);
+        if (quoted != null) {
+            return quoted;
+        }
+
+        if ("true".equalsIgnoreCase(expression) || "false".equalsIgnoreCase(expression)) {
+            return Boolean.valueOf(expression);
+        }
+
+        try {
+            if (expression.contains(".")) {
+                return Double.valueOf(expression);
+            }
+            return Integer.valueOf(expression);
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private static String tryExtractQuotedLiteral(String expression) {
+        if (expression == null || expression.length() < 2) {
+            return null;
+        }
+        String trimmed = expression.trim();
+        if (!(trimmed.startsWith("\"") && trimmed.endsWith("\""))) {
+            return null;
+        }
+        return unescapeJavaLiteral(trimmed.substring(1, trimmed.length() - 1));
+    }
+
+    private static String unescapeJavaLiteral(String body) {
+        StringBuilder out = new StringBuilder(body.length());
+        boolean escaped = false;
+        for (int i = 0; i < body.length(); i++) {
+            char c = body.charAt(i);
+            if (!escaped && c == '\\') {
+                escaped = true;
+                continue;
+            }
+            if (escaped) {
+                switch (c) {
+                    case 'n':
+                        out.append('\n');
+                        break;
+                    case 'r':
+                        out.append('\r');
+                        break;
+                    case 't':
+                        out.append('\t');
+                        break;
+                    case '"':
+                        out.append('"');
+                        break;
+                    case '\\':
+                        out.append('\\');
+                        break;
+                    default:
+                        out.append(c);
+                        break;
+                }
+                escaped = false;
+            } else {
+                out.append(c);
+            }
+        }
+        if (escaped) {
+            out.append('\\');
+        }
+        return out.toString();
     }
 
     private static PdfComparisonResult comparePdfs(Path jasperPdf, Path generatedPdf) throws IOException {

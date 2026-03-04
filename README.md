@@ -142,6 +142,13 @@ Ya está ignorado en `.gitignore`:
 - JavaPoet (generación de fuente Java)
 - Apache PDFBox (render del PDF final)
 
+## Compatibilidad JRXML
+
+Para ajustes recomendados de plantillas y casos reales de diferencias Jasper vs template generado, revisa:
+
+- `docs/jrxml-compatibility.md`
+- Script de normalización automática: `scripts/fix-jrxml-compat.sh`
+
 ## API de la clase generada
 
 La clase transpileada expone estas variantes:

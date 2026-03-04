@@ -1283,6 +1283,27 @@ public class JaspBoxCompiler {
         methodBuilder.addStatement("float $L = $L", tableXVar, xExpr);
         methodBuilder.addStatement("float $L = $L", tableYVar, yExpr);
 
+        String rowsObjVar = context.nextVar("tableRowsObj");
+        String rowsVar = context.nextVar("tableRows");
+        String rowVar = context.nextVar("tableRow");
+        methodBuilder.addStatement("Object $L = data.get($S)", rowsObjVar, tableRowsKey);
+        methodBuilder.addStatement(
+                "$T<$T<$T, Object>> $L = asRowList($L, $S)",
+                List.class,
+                Map.class,
+                String.class,
+                rowsVar,
+                rowsObjVar,
+                tableRowsKey);
+        String hasRowsVar = context.nextVar("tableHasRows");
+        methodBuilder.addStatement(
+                "boolean $L = ($L != null && !$L.isEmpty())",
+                hasRowsVar,
+                rowsVar,
+                rowsVar);
+
+        methodBuilder.beginControlFlow("if ($L)", hasRowsVar);
+
         if (tableHeaderHeight > 0) {
             CodeBlock rowCondition =
                     buildPrintWhenCondition(
@@ -1331,19 +1352,6 @@ public class JaspBoxCompiler {
             }
         }
 
-        String rowsObjVar = context.nextVar("tableRowsObj");
-        String rowsVar = context.nextVar("tableRows");
-        String rowVar = context.nextVar("tableRow");
-        methodBuilder.addStatement("Object $L = data.get($S)", rowsObjVar, tableRowsKey);
-        methodBuilder.addStatement(
-                "$T<$T<$T, Object>> $L = asRowList($L, $S)",
-                List.class,
-                Map.class,
-                String.class,
-                rowsVar,
-                rowsObjVar,
-                tableRowsKey);
-
         methodBuilder.beginControlFlow("for ($T<$T, Object> $L : $L)", Map.class, String.class, rowVar, rowsVar);
         CodeBlock detailCondition =
                 buildPrintWhenCondition(
@@ -1376,6 +1384,7 @@ public class JaspBoxCompiler {
                     context.currentFloatElementBottomVar,
                     tableYVar);
         }
+        methodBuilder.endControlFlow();
     }
 
     private void emitTableRow(

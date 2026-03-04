@@ -647,9 +647,7 @@ public class JaspBoxCompiler {
 
         List<JRElement> ordered = new ArrayList<>(elements);
         ordered.sort(Comparator.comparingInt(JRElement::getY).thenComparingInt(JRElement::getX));
-
-        String floatCursorVar = context.nextVar("floatCursorY");
-        methodBuilder.addStatement("float $L = $L", floatCursorVar, yBaseExpr);
+        Map<JRElement, String> floatBottomVars = new LinkedHashMap<>();
 
         for (JRElement element : ordered) {
             boolean isFloat = PositionTypeEnum.FLOAT.equals(element.getPositionTypeValue());
@@ -660,11 +658,22 @@ public class JaspBoxCompiler {
 
             String naturalYExpr = plus(yBaseExpr, element.getY());
             String actualYVar = context.nextVar("floatElemY");
+            methodBuilder.addStatement("float $L = $L", actualYVar, naturalYExpr);
+            for (Map.Entry<JRElement, String> entry : floatBottomVars.entrySet()) {
+                if (!horizontallyOverlaps(entry.getKey(), element)) {
+                    continue;
+                }
+                methodBuilder.addStatement(
+                        "$L = Math.max($L, $L)",
+                        actualYVar,
+                        actualYVar,
+                        entry.getValue());
+            }
+            String renderedBottomVar = context.nextVar("floatElemBottom");
             methodBuilder.addStatement(
-                    "float $L = Math.max($L, $L)",
-                    actualYVar,
-                    naturalYExpr,
-                    floatCursorVar);
+                    "float $L = $L",
+                    renderedBottomVar,
+                    actualYVar);
             String adjustedBaseYExpr = "(" + actualYVar + " - " + floatLiteral(element.getY()) + ")";
 
             CodeBlock condition =
@@ -672,6 +681,14 @@ public class JaspBoxCompiler {
             if (condition != null) {
                 methodBuilder.beginControlFlow("if ($L)", condition);
             }
+            methodBuilder.addStatement(
+                    "$L = Math.max($L, $L + $Lf)",
+                    renderedBottomVar,
+                    renderedBottomVar,
+                    actualYVar,
+                    (float) element.getHeight());
+            String previousFloatElementBottomVar = context.currentFloatElementBottomVar;
+            context.currentFloatElementBottomVar = renderedBottomVar;
             emitElementInternal(
                     context,
                     methodBuilder,
@@ -679,15 +696,11 @@ public class JaspBoxCompiler {
                     xBaseExpr,
                     adjustedBaseYExpr,
                     dataRef);
-            methodBuilder.addStatement(
-                    "$L = Math.max($L, $L + $Lf)",
-                    floatCursorVar,
-                    floatCursorVar,
-                    actualYVar,
-                    (float) element.getHeight());
+            context.currentFloatElementBottomVar = previousFloatElementBottomVar;
             if (condition != null) {
                 methodBuilder.endControlFlow();
             }
+            floatBottomVars.put(element, renderedBottomVar);
         }
     }
 
@@ -732,6 +745,17 @@ public class JaspBoxCompiler {
             }
         }
         return false;
+    }
+
+    private boolean horizontallyOverlaps(JRElement left, JRElement right) {
+        if (left == null || right == null) {
+            return false;
+        }
+        int leftStart = left.getX();
+        int leftEnd = left.getX() + Math.max(left.getWidth(), 0);
+        int rightStart = right.getX();
+        int rightEnd = right.getX() + Math.max(right.getWidth(), 0);
+        return leftStart < rightEnd && rightStart < leftEnd;
     }
 
     private float resolveRowCollapseHeight(GenerationContext context, List<JRElement> rowElements) {
@@ -971,6 +995,16 @@ public class JaspBoxCompiler {
                     textBlockHeightVar,
                     availableHeightVar);
         }
+        if (stretchHeight && context.currentFloatElementBottomVar != null) {
+            methodBuilder.addStatement(
+                    "$L = Math.max($L, $L + $Lf + Math.max($L - $L, 0f))",
+                    context.currentFloatElementBottomVar,
+                    context.currentFloatElementBottomVar,
+                    yExpr,
+                    height,
+                    textBlockHeightVar,
+                    availableHeightVar);
+        }
 
         methodBuilder.addStatement("contentStream.saveGraphicsState()");
         methodBuilder.addStatement(
@@ -1107,6 +1141,17 @@ public class JaspBoxCompiler {
         String childBaseYExpr = plus(yExpr, childOffsetY);
 
         if (frame.getElements() != null) {
+            String previousFloatElementBottomVar = context.currentFloatElementBottomVar;
+            String frameBottomVar = null;
+            if (previousFloatElementBottomVar != null) {
+                frameBottomVar = context.nextVar("frameBottomY");
+                methodBuilder.addStatement(
+                        "float $L = $L + $Lf",
+                        frameBottomVar,
+                        yExpr,
+                        height);
+                context.currentFloatElementBottomVar = frameBottomVar;
+            }
             emitElementList(
                     context,
                     methodBuilder,
@@ -1114,6 +1159,14 @@ public class JaspBoxCompiler {
                     childBaseXExpr,
                     childBaseYExpr,
                     dataRef);
+            if (previousFloatElementBottomVar != null) {
+                methodBuilder.addStatement(
+                        "$L = Math.max($L, $L)",
+                        previousFloatElementBottomVar,
+                        previousFloatElementBottomVar,
+                        frameBottomVar);
+                context.currentFloatElementBottomVar = previousFloatElementBottomVar;
+            }
         }
     }
 
@@ -1316,6 +1369,13 @@ public class JaspBoxCompiler {
             methodBuilder.endControlFlow();
         }
         methodBuilder.endControlFlow();
+        if (context.currentFloatElementBottomVar != null) {
+            methodBuilder.addStatement(
+                    "$L = Math.max($L, $L)",
+                    context.currentFloatElementBottomVar,
+                    context.currentFloatElementBottomVar,
+                    tableYVar);
+        }
     }
 
     private void emitTableRow(
@@ -2663,6 +2723,7 @@ public class JaspBoxCompiler {
         private String currentBandRenderedBottomVar;
         private Integer currentElementY;
         private String currentElementShiftVar;
+        private String currentFloatElementBottomVar;
 
         private GenerationContext(
                 JasperDesign design,

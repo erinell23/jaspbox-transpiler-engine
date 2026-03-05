@@ -589,14 +589,18 @@ public class JaspBoxCompiler {
                 methodBuilder.beginControlFlow("if ($L)", elementVisibleVar);
 
                 String elementShiftVar = context.nextVar("elementShift");
-                methodBuilder.addStatement(
-                        "float $L = ($L < 0f || $Lf < $L) ? 0f : ($L + $L)",
-                        elementShiftVar,
-                        collapseStartVar,
-                        (float) rowElement.getY(),
-                        collapseStartVar,
-                        collapsedVar,
-                        visualCollapsedVar);
+                if (overlayRow) {
+                    methodBuilder.addStatement("float $L = 0f", elementShiftVar);
+                } else {
+                    methodBuilder.addStatement(
+                            "float $L = ($L < 0f || $Lf < $L) ? 0f : ($L + $L)",
+                            elementShiftVar,
+                            collapseStartVar,
+                            (float) rowElement.getY(),
+                            collapseStartVar,
+                            collapsedVar,
+                            visualCollapsedVar);
+                }
                 String adjustedBaseYVar = context.nextVar("adjustedBaseY");
                 methodBuilder.addStatement(
                         "float $L = $L - $L",
@@ -1006,12 +1010,31 @@ public class JaspBoxCompiler {
                     availableHeightVar);
         }
 
+        String renderLineCountVar = context.nextVar("renderLineCount");
+        methodBuilder.addStatement("int $L = $L.size()", renderLineCountVar, linesVar);
+        if (!stretchHeight) {
+            String maxVisibleLinesVar = context.nextVar("maxVisibleLines");
+            methodBuilder.addStatement(
+                    "int $L = Math.max(1, (int) Math.floor($L / Math.max($L, 1f)))",
+                    maxVisibleLinesVar,
+                    availableHeightVar,
+                    lineHeightVar);
+            methodBuilder.addStatement(
+                    "$L = Math.max(1, Math.min($L, $L))",
+                    renderLineCountVar,
+                    renderLineCountVar,
+                    maxVisibleLinesVar);
+        }
+
         methodBuilder.addStatement("contentStream.saveGraphicsState()");
         methodBuilder.addStatement(
-                "contentStream.addRect($L + $Lf, 0f, $Lf, pageHeight)",
+                "contentStream.addRect($L + $Lf, $L + $Lf, $Lf, $Lf)",
                 xExpr,
                 leftPadding,
-                Math.max(width - leftPadding - rightPadding, 1f));
+                yPdfVar,
+                bottomPadding,
+                Math.max(width - leftPadding - rightPadding, 1f),
+                Math.max(height - topPadding - bottomPadding, 1f));
         methodBuilder.addStatement("contentStream.clip()");
 
         Color foreColor = defaultColor(context.styleResolver.getForecolor(textElement), Color.BLACK);
@@ -1021,7 +1044,7 @@ public class JaspBoxCompiler {
                 foreColor.getRed(),
                 foreColor.getGreen(),
                 foreColor.getBlue());
-        methodBuilder.beginControlFlow("for (int i = 0; i < $L.size(); i++)", linesVar);
+        methodBuilder.beginControlFlow("for (int i = 0; i < $L; i++)", renderLineCountVar);
         String lineVar = context.nextVar("line");
         methodBuilder.addStatement("String $L = $L.get(i)", lineVar, linesVar);
         String textXVar = context.nextVar("textX");

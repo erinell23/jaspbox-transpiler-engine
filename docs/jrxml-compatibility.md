@@ -63,6 +63,20 @@ En este repositorio ya se ajustó el runner para priorizar defaults literales de
 Cuando el dataset de aprobadores está vacío o ausente, Jasper puede no renderizar la tabla completa.  
 El engine de este repositorio ya fue ajustado para alinear ese comportamiento y no dibujar headers/detalle de la tabla sin filas.
 
+## 6) Negritas y familia tipográfica en templates generados
+
+En el runtime de templates generados:
+- se respeta `isBold`/`isItalic`,
+- pero se mantiene una sola familia base (Helvetica) por compatibilidad visual con implementaciones previas.
+
+Mapeo actual:
+- normal -> `HELVETICA`
+- bold -> `HELVETICA_BOLD`
+- italic -> `HELVETICA_OBLIQUE`
+- bold+italic -> `HELVETICA_BOLD_OBLIQUE`
+
+Si en el futuro se requiere mapear por familia del JRXML (`Times`, `Courier`, etc.), este comportamiento se puede extender en `resolveFont(...)` del runtime.
+
 ## Automatización de ajustes
 
 Existe un script para aplicar automáticamente estos cambios sobre uno o varios JRXML:

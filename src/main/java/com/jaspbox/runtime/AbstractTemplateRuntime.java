@@ -132,7 +132,17 @@ public abstract class AbstractTemplateRuntime {
     }
 
     protected static PDFont resolveFont(String fontName, boolean bold, boolean italic) {
-        return new PDType1Font(Standard14Fonts.FontName.HELVETICA);
+        Standard14Fonts.FontName selected;
+        if (bold && italic) {
+            selected = Standard14Fonts.FontName.HELVETICA_BOLD_OBLIQUE;
+        } else if (bold) {
+            selected = Standard14Fonts.FontName.HELVETICA_BOLD;
+        } else if (italic) {
+            selected = Standard14Fonts.FontName.HELVETICA_OBLIQUE;
+        } else {
+            selected = Standard14Fonts.FontName.HELVETICA;
+        }
+        return new PDType1Font(selected);
     }
 
     protected static float alignTextX(
